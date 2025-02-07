@@ -2734,6 +2734,7 @@ typedef enum ObItemType
   T_ORGANIZATION = 4793,
   T_ORGANIZATION_INDEX = 4794,
   T_ORGANIZATION_HEAP = 4795,
+  T_FUN_SYS_HELLO = 2100,
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 

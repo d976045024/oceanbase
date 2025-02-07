@@ -56,6 +56,7 @@ int ObWhereSubQueryPullup::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
   bool is_single_set_happened = false;
   trans_happened = false;
   ObSEArray<ObSelectStmt*, 4> unnest_stmts;
+  LOG_TRACE("transform one stmt", K(parent_stmts), KPC(stmt));
   if (OB_FAIL(transform_anyall_query(stmt, unnest_stmts, is_anyall_happened))) {
     LOG_WARN("failed to transform any all query", K(ret));
   } else if (OB_FAIL(transform_single_set_query(stmt, unnest_stmts, is_single_set_happened))) {
@@ -117,6 +118,7 @@ int ObWhereSubQueryPullup::transform_anyall_query(ObDMLStmt *stmt,
   } else if (OB_FAIL(conditions.assign(stmt->get_condition_exprs()))) {
     LOG_WARN("failed to assign a new condition exprs", K(ret));
   } else {
+    LOG_TRACE("transform anyall query condition", K(conditions), KPC(stmt));
     for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
       bool is_happened = false;
       if (OB_FAIL(transform_one_expr(stmt, conditions.at(i), unnest_stmts, is_happened))) {
@@ -484,6 +486,7 @@ int ObWhereSubQueryPullup::do_transform_pullup_subquery(ObDMLStmt *stmt,
                                                                    ctx_))) {
     LOG_WARN("failed to add const param constraints", K(ret));
   } else if (trans_param.need_create_spj_) {
+    LOG_TRACE("need create spj");
     bool ignore_select_item = T_OP_EXISTS == expr->get_expr_type() ||
                               T_OP_NOT_EXISTS == expr->get_expr_type();
     if (OB_FAIL(ObTransformUtils::create_spj_and_pullup_correlated_exprs(query_ref->get_exec_params(),
@@ -494,6 +497,8 @@ int ObWhereSubQueryPullup::do_transform_pullup_subquery(ObDMLStmt *stmt,
     } else {
       query_ref->set_ref_stmt(subquery);
     }
+  } else {
+    LOG_TRACE("do not need create spj");
   }
   if (OB_FAIL(ret)) {
   } else if (trans_param.is_correlated_ &&
@@ -507,6 +512,7 @@ int ObWhereSubQueryPullup::do_transform_pullup_subquery(ObDMLStmt *stmt,
   } else {
     trans_happened = true;
   }
+  LOG_TRACE("after pullup", KPC(stmt));
   return ret;
 }
 

@@ -3325,6 +3325,7 @@ int ObSql::generate_plan(ParseResult &parse_result,
 {
   int ret = OB_SUCCESS;
   uint64_t aggregate_setting = 0;
+  LOG_TRACE("generate plan stmt", KPC(basic_stmt));
   ObPhysicalPlanCtx *pctx = result.get_exec_context().get_physical_plan_ctx();
   bool allow_audit = false;
   ObArray<ObAuditUnit> audit_units;

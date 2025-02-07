@@ -6679,6 +6679,7 @@ int ObTransformUtils::create_set_stmt(ObTransformerCtx *ctx,
   ObSelectStmt *temp_stmt = NULL;
   ObSelectStmt *child_stmt = NULL;
   const int64_t child_num = child_stmts.count();
+  LOG_TRACE("create set stmt child stmts", K(child_stmts));
   if (OB_ISNULL(ctx) || OB_ISNULL(ctx->stmt_factory_) || OB_ISNULL(ctx->expr_factory_)
       || OB_ISNULL(ctx->stmt_factory_->get_query_ctx())
       || OB_UNLIKELY(child_num < 2)) {
@@ -6743,6 +6744,7 @@ int ObTransformUtils::create_set_stmt(ObTransformerCtx *ctx,
       set_stmt = temp_stmt;
     }
   }
+  LOG_TRACE("create set stmt set", KPC(set_stmt));
   return ret;
 }
 
@@ -11846,6 +11848,7 @@ int ObTransformUtils::create_spj_and_pullup_correlated_exprs(const ObIArray<ObEx
                                                              const bool ignore_select_item,
                                                              const bool skip_const_select_item)
 {
+  LOG_TRACE("create spj subquery", KPC(subquery));
   int ret = OB_SUCCESS;
   ObStmtFactory *stmt_factory = NULL;
   ObSQLSessionInfo *session_info = NULL;
@@ -11935,6 +11938,7 @@ int ObTransformUtils::create_spj_and_pullup_correlated_exprs(const ObIArray<ObEx
       LOG_TRACE("succeed to create spj", K(*subquery));
     }
   }
+  LOG_TRACE("succeed to create spj", K(*subquery));
   return ret;
 }
 

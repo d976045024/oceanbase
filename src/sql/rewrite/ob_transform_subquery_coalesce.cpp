@@ -40,6 +40,9 @@ int ObTransformSubqueryCoalesce::transform_one_stmt(common::ObIArray<ObParentDML
   int ret = OB_SUCCESS;
   bool is_happened = false;
   trans_happened = false;
+  if (!OB_ISNULL(stmt) && !OB_ISNULL(ctx_)) {
+    LOG_TRACE("beform subquery coalesce", KPC(stmt));
+  }
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("stmt is NULL", K(ret), K(stmt), K(ctx_));
@@ -132,6 +135,7 @@ int ObTransformSubqueryCoalesce::transform_same_exprs(ObDMLStmt *stmt,
   } else if (OB_FAIL(classify_conditions(conds, validity_exprs))) {
     LOG_WARN("failed to check conditions validity", K(ret));
   } else {
+    LOG_TRACE("transform same validity", K(validity_exprs));
     bool coalesce_happened = false;
     bool happened = false;
     bool all_happened = false;
@@ -391,6 +395,7 @@ int ObTransformSubqueryCoalesce::coalesce_same_any_all_exprs(ObDMLStmt *stmt,
                                                              bool &is_happened)
 {
   int ret = OB_SUCCESS;
+  LOG_TRACE("same any all", K(filters));
   ObSEArray<ObPCParamEqualInfo, 4> equal_infos;
   ObStmtMapInfo map_info;
   QueryRelation relation;
@@ -414,6 +419,7 @@ int ObTransformSubqueryCoalesce::coalesce_same_any_all_exprs(ObDMLStmt *stmt,
       for (int64_t j = i + 1; OB_SUCC(ret) && !removed_items.has_member(i) && j < filters.count(); ++j) {
         second_left_expr = get_any_all_left_hand_expr(filters.at(j));
         second_query_ref = get_any_all_query_expr(filters.at(j));
+        LOG_TRACE("coalesce query stmt", KPC(first_query_ref->get_ref_stmt()), KPC(second_query_ref->get_ref_stmt()));
         map_info.reset();
         remove_index = -1;
         OPT_TRACE("try to coalesce same any/all exprs");
@@ -445,6 +451,8 @@ int ObTransformSubqueryCoalesce::coalesce_same_any_all_exprs(ObDMLStmt *stmt,
                                                                   true))) {
           LOG_WARN("failed to check stmt containment", K(ret));
         } else if (!map_info.is_select_item_equal_) {
+          LOG_TRACE("map info", K(map_info));
+          LOG_TRACE("relation", K(relation));
           OPT_TRACE("stmts have different select items, can not coalesce");
         } else if (relation == QUERY_LEFT_SUBSET || relation == QUERY_EQUAL) {
           remove_index = (type == T_ANY ? j : i);

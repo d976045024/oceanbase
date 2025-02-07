@@ -429,6 +429,7 @@
 #include "ob_expr_priv_st_geohash.h"
 #include "ob_expr_priv_st_makepoint.h"
 #include "ob_expr_to_pinyin.h"
+#include "ob_expr_hello.h"
 
 namespace oceanbase
 {
@@ -1359,6 +1360,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   NULL, // ObExprArrayReplace::eval_array_replace,                    /* 826 */
   NULL, // ObExprArrayPopfront::eval_array_popfront,                  /* 827 */
   NULL, // ObExprCurrentCatalog::eval_current_catalog,                /* 828 */
+  ObExprHello::eval_hello,                                            /* 829 */
 
 };
 

@@ -115,9 +115,9 @@ struct SingleSetParam {
     bool need_add_limit_constraint_;
 
     TO_STRING_KV(K_(op),
-                 K_(subquery_expr),
+                //  K_(subquery_expr),
                  K_(subquery),
-                 K_(left_hand),
+                //  K_(left_hand),
                  K_(can_be_transform),
                  K_(is_correlated),
                  K_(need_create_spj),

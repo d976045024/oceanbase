@@ -493,6 +493,7 @@
 #include "sql/engine/expr/ob_expr_priv_st_geohash.h"
 #include "sql/engine/expr/ob_expr_priv_st_makepoint.h"
 #include "sql/engine/expr/ob_expr_to_pinyin.h"
+#include "sql/engine/expr/ob_expr_hello.h"
 
 
 
@@ -515,6 +516,9 @@ static AllocFunc OP_ALLOC_ORCL[T_MAX_OP];
         NAME_TYPES[i].type_ = op.get_type();        \
         NAME_TYPES[i].is_internal_ = op.is_internal_for_mysql(); \
         OP_ALLOC[op.get_type()] = ObExprOperatorFactory::alloc<OpClass>; \
+        if (strcmp(op.get_name(), "hello") == 0) {  \
+          LOG_TRACE("register hello");              \
+        }                                           \
         i++;                                        \
       }                                             \
     }();                                            \
@@ -1213,6 +1217,7 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprGetMySQLRoutineParameterTypeStr);
     REG_OP(ObExprCalcOdpsSize);
     REG_OP(ObExprToPinyin);
+    REG_OP(ObExprHello);
   }();
 // 注册oracle系统函数
   REG_OP_ORCL(ObExprSysConnectByPath);

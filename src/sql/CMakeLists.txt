@@ -439,6 +439,7 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_host_ip.cpp
   engine/expr/ob_expr_icu_version.cpp
   engine/expr/ob_expr_ifnull.cpp
+  engine/expr/ob_expr_hello.cpp
   engine/expr/ob_expr_inet.cpp
   engine/expr/ob_expr_initcap.cpp
   engine/expr/ob_expr_inner_decode_like.cpp

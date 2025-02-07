@@ -787,6 +787,7 @@
 #define N_BIT_LEFT_SHIFT "<<"
 #define N_BIT_RIGHT_SHIFT ">>"
 #define N_IFNULL "ifnull"
+#define N_HELLO "hello"
 #define N_ALIAS_REF "alias_ref"
 #define N_INDEX_ARG "index_arg"
 #define N_FOREIGN_KEY_ARG "foreign_key_arg"

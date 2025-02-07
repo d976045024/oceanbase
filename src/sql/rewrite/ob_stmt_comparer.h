@@ -87,6 +87,7 @@ struct ObStmtMapInfo {
                K_(select_item_map),
                K_(equal_param_map),
                K_(view_select_item_map),
+               K_(is_select_item_equal),
                K_(is_order_equal),
                K_(is_distinct_equal),
                K_(left_can_be_replaced));

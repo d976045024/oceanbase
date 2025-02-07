@@ -520,6 +520,9 @@ int ObStmtComparer::check_stmt_containment(const ObDMLStmt *first,
   int64_t match_count = 0;
   ObSelectStmt *first_sel = NULL;
   ObSelectStmt *second_sel = NULL;
+  ObSelectStmt *first_sel_stmt = const_cast<ObSelectStmt*>(static_cast<const ObSelectStmt*>(first));
+  ObSelectStmt *second_sel_stmt = const_cast<ObSelectStmt*>(static_cast<const ObSelectStmt*>(second));
+  LOG_TRACE("check stmt contain", KPC(first_sel_stmt), KPC(second_sel_stmt));
   relation = QueryRelation::QUERY_UNCOMPARABLE;
   if (OB_ISNULL(first) || OB_ISNULL(second)) {
     ret = OB_ERR_UNEXPECTED;
