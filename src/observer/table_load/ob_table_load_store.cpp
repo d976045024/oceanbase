@@ -13,25 +13,15 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/table_load/ob_table_load_store.h"
-#include "observer/table_load/ob_table_load_merger.h"
-#include "observer/table_load/ob_table_load_service.h"
-#include "observer/table_load/ob_table_load_stat.h"
-#include "observer/table_load/ob_table_load_store_ctx.h"
 #include "observer/table_load/ob_table_load_store_trans.h"
 #include "observer/table_load/ob_table_load_store_trans_px_writer.h"
-#include "observer/table_load/ob_table_load_table_ctx.h"
 #include "observer/table_load/ob_table_load_task.h"
 #include "observer/table_load/ob_table_load_task_scheduler.h"
 #include "observer/table_load/ob_table_load_trans_store.h"
-#include "observer/table_load/ob_table_load_utils.h"
 #include "observer/table_load/ob_table_load_store_table_ctx.h"
 #include "observer/table_load/ob_table_load_merger_manager.h"
 #include "observer/table_load/ob_table_load_pre_sorter.h"
-#include "storage/direct_load/ob_direct_load_insert_table_ctx.h"
-#include "share/stat/ob_opt_stat_monitor_manager.h"
-#include "storage/blocksstable/ob_sstable.h"
-#include "share/table/ob_table_load_dml_stat.h"
-#include "observer/table_load/ob_table_load_pre_sort_writer.h"
+#include "src/observer/virtual_table/ob_all_virtual_dml_stats.h"
 
 namespace oceanbase
 {
@@ -72,14 +62,15 @@ void ObTableLoadStore::cancel_table_ctx(ObTableLoadTableCtx *ctx)
     ctx->store_ctx_->data_store_table_ctx_->insert_table_ctx_->cancel();
   }
 
-  FOREACH(it, ctx->store_ctx_->index_store_table_ctx_map_)
-  {
-    if (OB_ISNULL(it->second) || OB_ISNULL(it->second->insert_table_ctx_)) {
+  for (int64_t i = 0; i < ctx->store_ctx_->index_store_table_ctxs_.count(); i++) {
+    ObTableLoadStoreTableCtx *index_store_table_ctx =
+      ctx->store_ctx_->index_store_table_ctxs_.at(i);
+    if (OB_ISNULL(index_store_table_ctx) || OB_ISNULL(index_store_table_ctx->insert_table_ctx_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected index store table ctx or insert_table_ctx is NULL", KR(ret),
-               K(it->first));
+               KP(index_store_table_ctx));
     } else {
-      it->second->insert_table_ctx_->cancel();
+      index_store_table_ctx->insert_table_ctx_->cancel();
     }
   }
 }
@@ -114,6 +105,16 @@ void ObTableLoadStore::abort_ctx(ObTableLoadTableCtx *ctx, bool &is_stopped)
     ctx->store_ctx_->task_scheduler_->stop();
     if (OB_NOT_NULL(ctx->store_ctx_->pre_sorter_)) {
       ctx->store_ctx_->pre_sorter_->stop();
+    }
+    if (ctx->is_assigned_memory()) {
+      ObMutexGuard guard(ctx->store_ctx_->get_op_lock());
+      if (ctx->is_assigned_memory()) {
+        int tmp_ret = OB_SUCCESS;
+        if (OB_TMP_FAIL(ObTableLoadService::recycle_memory(ctx->param_.task_need_sort_, ctx->param_.avail_memory_))) {
+          LOG_WARN("fail to recycle memory", KR(tmp_ret));
+        }
+        ctx->reset_assigned_memory();
+      }
     }
     is_stopped = ctx->store_ctx_->task_scheduler_->is_stopped() && (0 == ATOMIC_LOAD(&ctx->store_ctx_->px_writer_count_));
   }

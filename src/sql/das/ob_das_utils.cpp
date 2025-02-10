@@ -12,18 +12,8 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_utils.h"
-#include "sql/das/ob_das_context.h"
-#include "sql/engine/ob_exec_context.h"
 #include "pl/ob_pl.h"
-#include "sql/optimizer/ob_phy_table_location_info.h"
-#include "share/schema/ob_schema_getter_guard.h"
-#include "share/schema/ob_multi_version_schema_service.h"
-#include "share/location_cache/ob_location_service.h"
-#include "observer/ob_server_struct.h"
-#include "observer/omt/ob_tenant_srs.h"
 #include "share/ob_tablet_autoincrement_service.h"
-#include "storage/access/ob_dml_param.h"
-#include "storage/blocksstable/ob_datum_row_utils.h"
 namespace oceanbase
 {
 using namespace common;
@@ -801,6 +791,28 @@ int ObDASUtils::find_child_das_def(const ObDASBaseCtDef *root_ctdef,
                                      op_type,
                                      target_ctdef,
                                      target_rtdef))) {
+        LOG_WARN("find child das def failed", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDASUtils::find_child_das_ctdef(const ObDASBaseCtDef *root_ctdef,
+                                   ObDASOpType op_type,
+                                   const ObDASBaseCtDef *&target_ctdef)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(root_ctdef)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("root ctdef or rtdef is nullptr", K(ret), KP(root_ctdef));
+  } else if (root_ctdef->op_type_ == op_type) {
+    target_ctdef = root_ctdef;
+  } else {
+    for (int i = 0; OB_SUCC(ret) && i < root_ctdef->children_cnt_; ++i) {
+      if (OB_FAIL(find_child_das_ctdef(root_ctdef->children_[i],
+                                     op_type,
+                                     target_ctdef))) {
         LOG_WARN("find child das def failed", K(ret));
       }
     }

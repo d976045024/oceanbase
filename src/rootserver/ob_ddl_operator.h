@@ -320,6 +320,7 @@ public:
                            const share::schema::ObTableSchema &new_table_schema,
                            share::schema::ObColumnSchemaV2 &new_column);
   int delete_single_column(common::ObMySQLTransaction &trans,
+                           const int64_t new_schema_version,
                            share::schema::ObTableSchema &new_table_schema,
                            const common::ObString &column_name);
   int batch_update_system_table_columns(
@@ -377,6 +378,7 @@ public:
                                        const uint64_t database_id,
                                        const obrpc::ObRenameIndexArg &rename_index_arg,
                                        const share::schema::ObIndexStatus *new_index_status,
+                                       const bool is_in_deleting,
                                        common::ObMySQLTransaction &trans,
                                        share::schema::ObTableSchema &new_index_table_schema);
   int alter_table_rename_index_with_origin_index_name(
@@ -384,6 +386,7 @@ public:
       const uint64_t index_table_id,
       const ObString &new_index_name, // Attention!!! origin index name, don't use table name. For example, __idx_500005_{index_name}, please using index_name!!!
       const share::schema::ObIndexStatus &new_index_status,
+      const bool is_in_deleting,
       common::ObMySQLTransaction &trans,
       share::schema::ObTableSchema &new_index_table_schema);
 
@@ -1049,10 +1052,16 @@ public:
   int update_single_column(common::ObMySQLTransaction &trans,
                            const share::schema::ObTableSchema &origin_table_schema,
                            const share::schema::ObTableSchema &new_table_schema,
-                           share::schema::ObColumnSchemaV2 &column_schema);
+                           share::schema::ObColumnSchemaV2 &column_schema,
+                           const bool need_del_stats /*for online drop column, need delete column stat*/);
   int update_single_column_group(common::ObMySQLTransaction &trans,
                                  const share::schema::ObTableSchema &origin_table_schema,
                                  const share::schema::ObColumnSchemaV2 &new_column_schema);
+  int update_column_and_column_group(common::ObMySQLTransaction &trans,
+                                     const share::schema::ObTableSchema &origin_table_schema,
+                                     const share::schema::ObTableSchema &new_table_schema,
+                                     share::schema::ObColumnSchemaV2 &column_schema,
+                                    const bool need_del_stats /*for online drop column, need delete column stat*/);
   int update_partition_option(common::ObMySQLTransaction &trans,
                               share::schema::ObTableSchema &table_schema);
   int update_partition_option(common::ObMySQLTransaction &trans,
@@ -1090,9 +1099,10 @@ public:
                                 share::schema::ObTableSchema &del_table_schema,
                                 common::ObMySQLTransaction &trans);
   int exchange_table_subpartitions(const share::schema::ObTableSchema &orig_table_schema,
-                                share::schema::ObTableSchema &inc_table_schema,
-                                share::schema::ObTableSchema &del_table_schema,
-                                common::ObMySQLTransaction &trans);
+                                   share::schema::ObTableSchema &inc_table_schema,
+                                   share::schema::ObTableSchema &del_table_schema,
+                                   common::ObMySQLTransaction &trans,
+                                   const bool is_subpart_idx_specified);
   int get_target_auto_inc_sequence_value(const uint64_t tenant_id,
                                          const uint64_t table_id,
                                          const uint64_t column_id,
@@ -1218,6 +1228,7 @@ private:
       const ObString &index_name,
       const ObString &new_index_name,
       const share::schema::ObIndexStatus *new_index_status,
+      const bool is_in_deleting,
       share::schema::ObSchemaGetterGuard &schema_guard,
       common::ObMySQLTransaction &trans,
       ObArenaAllocator &allocator);
@@ -1227,6 +1238,7 @@ private:
       const share::schema::ObTableSchema *index_table_schema,
       const ObString &new_index_table_name,
       const share::schema::ObIndexStatus *new_index_status,
+      const bool is_in_deleting,
       common::ObMySQLTransaction &trans,
       share::schema::ObTableSchema &new_index_table_schema);
 

@@ -12,14 +12,13 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
-#include "sql/resolver/expr/ob_raw_expr.h"
+#include "ob_raw_expr.h"
 #include "sql/resolver/expr/ob_raw_expr_info_extractor.h"
 #include "sql/resolver/expr/ob_raw_expr_deduce_type.h"
 #include "sql/resolver/expr/ob_expr_relation_analyzer.h"
+#include "sql/resolver/expr/ob_raw_expr_type_demotion.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_logical_operator.h"
-#include "common/object/ob_object.h"
-#include "common/ob_smart_call.h"
 #include "sql/engine/expr/ob_expr_autoinc_nextval.h"
 #include "sql/engine/expr/ob_expr_udf.h"
 #include "sql/engine/expr/ob_expr_pl_get_cursor_attr.h"
@@ -27,9 +26,6 @@
 #include "sql/engine/expr/ob_expr_plsql_variable.h"
 #include "sql/engine/expr/ob_expr_collection_construct.h"
 #include "sql/engine/expr/ob_expr_object_construct.h"
-#include "sql/engine/expr/ob_pl_expr_subquery.h"
-#include "share/config/ob_server_config.h"
-#include "sql/resolver/expr/ob_raw_expr_copier.h"
 #include "sql/engine/expr/ob_expr_sql_udt_construct.h"
 #include "sql/engine/expr/ob_expr_priv_attribute_access.h"
 
@@ -424,8 +420,9 @@ int ObRawExpr::deduce_type(const ObSQLSessionInfo *session_info,
 {
   //LOG_DEBUG("deduce_type", "usec", ObSQLUtils::get_usec());
   int ret = OB_SUCCESS;
-  ObRawExprDeduceType expr_deducer(session_info, solidify_session_vars, local_vars, local_var_id);
-  expr_deducer.set_expr_factory(expr_factory_);
+  ObRawExprTypeDemotion type_demotion(session_info, expr_factory_);
+  ObRawExprDeduceType expr_deducer(session_info, expr_factory_, solidify_session_vars, local_vars,
+                                   local_var_id, type_demotion);
   if (OB_FAIL(expr_deducer.deduce(*this))) {
     if (OB_NOT_NULL(session_info) && session_info->is_varparams_sql_prepare() &&
         OB_ERR_INVALID_COLUMN_NUM != ret &&
@@ -5006,6 +5003,10 @@ int ObSysFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
       if (OB_FAIL(BUF_PRINTF("%ld", get_mview_id()))) {
         LOG_WARN("fail to BUF_PRINTF", K(ret));
       }
+    } else if (IS_TYPE_DEMOTION_FUN(get_expr_type())) {
+      if (OB_FAIL(get_type_demotion_name(buf, buf_len, pos, type))) {
+        LOG_WARN("fail to get type demotion expr name", K(ret));
+      }
     } else {
       int64_t i = 0;
       if (get_param_count() > 1) {
@@ -5178,6 +5179,32 @@ int ObSysFunRawExpr::get_autoinc_nextval_name(char *buf, int64_t buf_len, int64_
     if (OB_FAIL(BUF_PRINTF("%s.", autoinc_qualified_name.ptr()))) {
       LOG_WARN("fail to BUF_PRINTF", K(ret));
     }
+  }
+  return ret;
+}
+
+int ObSysFunRawExpr::get_type_demotion_name(char *buf, int64_t buf_len, int64_t &pos,
+                                            ExplainType explain_type) const
+{
+  int ret = OB_SUCCESS;
+  const ObRawExpr *const_expr = NULL;
+  if (OB_ISNULL(buf) || !IS_TYPE_DEMOTION_FUN(get_expr_type())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument",  K(ret), K(buf), K(get_expr_type()));
+  } else if (OB_UNLIKELY(2 != get_param_count())) {
+    ret = OB_INVALID_ARGUMENT_NUM;
+    LOG_WARN("invalid argument",  K(ret), K(get_param_count()));
+  } else if (OB_ISNULL(get_param_expr(0)) || OB_ISNULL(get_param_expr(1))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("parm expr is NULL", K(ret));
+  } else if (OB_FAIL(ObRawExprUtils::get_real_expr_without_cast(get_param_expr(0), const_expr))) {
+    LOG_WARN("fail to get real expr without cast from args", K(ret));
+  } else if (OB_FAIL(const_expr->get_name(buf, buf_len, pos, explain_type))) {
+    LOG_WARN("fail to get_name", K(ret));
+  } else if (OB_FAIL(BUF_PRINTF(", "))) {
+    LOG_WARN("fail to BUF_PRINTF", K(ret));
+  } else if (OB_FAIL(get_cast_type_name(buf, buf_len, pos))) {
+    LOG_WARN("fail to get_cast_type_name", K(ret));
   }
   return ret;
 }

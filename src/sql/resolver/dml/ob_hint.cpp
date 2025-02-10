@@ -11,12 +11,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
-#include "sql/resolver/dml/ob_hint.h"
-#include "lib/utility/ob_unify_serialize.h"
+#include "ob_hint.h"
 #include "sql/optimizer/ob_log_plan.h"
-#include "common/ob_smart_call.h"
-#include "sql/monitor/ob_sql_plan.h"
-#include "share/config/ob_config_helper.h"
 
 namespace oceanbase
 {
@@ -850,7 +846,8 @@ bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObO
     case OPTIMIZER_GROUP_BY_PLACEMENT:
     case ENABLE_SPF_BATCH_RESCAN:
     case NLJ_BATCHING_ENABLED:
-    case ENABLE_PX_ORDERED_COORD: {
+    case ENABLE_PX_ORDERED_COORD:
+    case DISABLE_GTT_SESSION_ISOLATION: {
       is_valid = val.is_varchar() && (0 == val.get_varchar().case_compare("true")
                                       || 0 == val.get_varchar().case_compare("false"));
       break;
@@ -987,6 +984,17 @@ bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObO
     }
     case DAS_BATCH_RESCAN_FLAG: {
       is_valid = val.is_int() && 0 <= val.get_int();
+      break;
+    }
+    case ENABLE_CONSTANT_TYPE_DEMOTION: {
+      is_valid = val.is_varchar() && (0 == val.get_varchar().case_compare("true")
+                                      || 0 == val.get_varchar().case_compare("false"));
+      break;
+    }
+    case NON_STANDARD_COMPARISON_LEVEL: {
+      is_valid = val.is_varchar() && (0 == val.get_varchar().case_compare("none")
+                                      || 0 == val.get_varchar().case_compare("equal")
+                                      || 0 == val.get_varchar().case_compare("range"));
       break;
     }
     default:

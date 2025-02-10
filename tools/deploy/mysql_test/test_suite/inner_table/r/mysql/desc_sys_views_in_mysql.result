@@ -242,11 +242,11 @@ cnt
 1
 desc information_schema.ROUTINES;
 Field	Type	Null	Key	Default	Extra
-SPECIFIC_NAME	varchar(64)	NO		NULL	
+SPECIFIC_NAME	varchar(64)	NO			
 ROUTINE_CATALOG	varchar(512)	NO			
-ROUTINE_SCHEMA	varchar(64)	NO		NULL	
-ROUTINE_NAME	varchar(64)	NO		NULL	
-ROUTINE_TYPE	varchar(9)	NO		NULL	
+ROUTINE_SCHEMA	varchar(64)	NO			
+ROUTINE_NAME	varchar(64)	NO			
+ROUTINE_TYPE	varchar(9)	NO			
 DATA_TYPE	varchar(64)	NO			
 CHARACTER_MAXIMUM_LENGTH	bigint(20)	NO			
 CHARACTER_OCTET_LENGTH	bigint(20)	NO			
@@ -270,9 +270,9 @@ LAST_ALTERED	datetime	YES
 SQL_MODE	text	NO			
 ROUTINE_COMMENT	longtext	NO			
 DEFINER	varchar(93)	NO			
-CHARACTER_SET_CLIENT	varchar(32)	NO		NULL	
-COLLATION_CONNECTION	varchar(32)	NO		NULL	
-DATABASE_COLLATION	varchar(32)	NO		NULL	
+CHARACTER_SET_CLIENT	varchar(32)	NO			
+COLLATION_CONNECTION	varchar(32)	NO			
+DATABASE_COLLATION	varchar(32)	NO			
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from information_schema.ROUTINES limit 1);
 cnt
 1
@@ -4606,6 +4606,7 @@ cnt
 1
 desc oceanbase.GV$OB_SQL_PLAN;
 Field	Type	Null	Key	Default	Extra
+TENANT_ID	bigint(20)	NO		NULL	
 SVR_IP	varchar(46)	NO		NULL	
 SVR_PORT	bigint(20)	NO		NULL	
 PLAN_ID	bigint(20)	NO		NULL	
@@ -4649,6 +4650,7 @@ cnt
 1
 desc oceanbase.V$OB_SQL_PLAN;
 Field	Type	Null	Key	Default	Extra
+TENANT_ID	bigint(20)	NO			
 SQL_ID	varchar(32)	NO			
 DB_ID	bigint(20)	NO			
 PLAN_HASH	bigint(20) unsigned	NO			
@@ -7799,6 +7801,15 @@ BASELINE_CPU_TIME	bigint(20)	YES		NULL
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_SPM_EVO_RESULT limit 1);
 cnt
 1
+desc oceanbase.DBA_OB_KV_REDIS_TABLE;
+Field	Type	Null	Key	Default	Extra
+COMMAND_NAME	varchar(1024)	NO		NULL	
+TABLE_NAME	varchar(256)	NO		NULL	
+GMT_CREATE	timestamp(6)	YES			
+GMT_MODIFIED	timestamp(6)	YES			
+select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_KV_REDIS_TABLE limit 1);
+cnt
+1
 desc oceanbase.GV$OB_FUNCTION_IO_STAT;
 Field	Type	Null	Key	Default	Extra
 SVR_IP	varchar(46)	NO		NULL	
@@ -7849,6 +7860,65 @@ LAST_ACCESS_TIME	timestamp(6)	NO		NULL
 LAST_MODIFY_TIME	timestamp(6)	NO		NULL	
 BIRTH_TIME	timestamp(6)	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_TEMP_FILES limit 1);
+cnt
+1
+desc mysql.proc;
+Field	Type	Null	Key	Default	Extra
+DB	varchar(128)	NO			
+NAME	varchar(128)	NO			
+TYPE	varchar(10)	NO			
+SPECIFIC_NAME	varchar(128)	NO			
+LANGUAGE	varchar(4)	NO			
+SQL_DATA_ACCESS	varchar(32)	NO			
+IS_DETERMINISTIC	varchar(4)	NO			
+SECURITY_TYPE	varchar(10)	NO			
+PARAM_LIST	longblob	NO			
+RETURNS	longblob	NO			
+BODY	longblob	NO			
+DEFINER	varchar(77)	NO			
+CREATED	timestamp(6)	NO			
+MODIFIED	timestamp(6)	NO			
+SQL_MODE	text	NO			
+COMMENT	varchar(4096)	NO			
+CHARACTER_SET_CLIENT	varchar(128)	NO			
+COLLATION_CONNECTION	varchar(128)	NO			
+DB_COLLATION	varchar(128)	NO			
+BODY_UTF8	longblob	NO			
+select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from mysql.proc limit 1);
+cnt
+1
+desc oceanbase.GV$OB_PLUGINS;
+Field	Type	Null	Key	Default	Extra
+SVR_IP	varchar(46)	NO		NULL	
+SVR_PORT	bigint(20)	NO		NULL	
+NAME	varchar(64)	YES		NULL	
+STATUS	varchar(64)	YES		NULL	
+TYPE	varchar(80)	YES		NULL	
+LIBRARY	varchar(128)	YES		NULL	
+LIBRARY_VERSION	varchar(80)	YES		NULL	
+LIBRARY_REVISION	varchar(80)	YES		NULL	
+INTERFACE_VERSION	varchar(80)	YES		NULL	
+AUTHOR	varchar(64)	YES		NULL	
+LICENSE	varchar(64)	YES		NULL	
+DESCRIPTION	varchar(65535)	YES		NULL	
+select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.GV$OB_PLUGINS limit 1);
+cnt
+1
+desc oceanbase.V$OB_PLUGINS;
+Field	Type	Null	Key	Default	Extra
+SVR_IP	varchar(46)	NO			
+SVR_PORT	bigint(20)	NO			
+NAME	varchar(64)	NO			
+STATUS	varchar(64)	NO			
+TYPE	varchar(80)	NO			
+LIBRARY	varchar(128)	NO			
+LIBRARY_VERSION	varchar(80)	NO			
+LIBRARY_REVISION	varchar(80)	NO			
+INTERFACE_VERSION	varchar(80)	NO			
+AUTHOR	varchar(64)	NO			
+LICENSE	varchar(64)	NO			
+DESCRIPTION	varchar(65535)	NO			
+select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_PLUGINS limit 1);
 cnt
 1
 select case cnt when 0 then NULL else 'UNEXPECTED ERROR: It is expected to be an empty set, which means that all GV$ and V$ view column names are defined consistently' end ERROR_INFO from (select /*+no_rewrite*/ count(*) cnt from

@@ -13,27 +13,17 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "pl/sys_package/ob_dbms_stats.h"
 #include "share/stat/ob_dbms_stats_executor.h"
-#include "share/schema/ob_part_mgr_util.h"
 #include "sql/parser/ob_parser.h"
-#include "share/ob_rpc_struct.h"
 #include "share/stat/ob_dbms_stats_utils.h"
-#include "share/stat/ob_opt_stat_monitor_manager.h"
+#include "src/observer/virtual_table/ob_all_virtual_dml_stats.h"
 #include "share/stat/ob_opt_stat_manager.h"
 #include "share/stat/ob_dbms_stats_export_import.h"
 #include "share/stat/ob_dbms_stats_lock_unlock.h"
-#include "share/stat/ob_basic_stats_estimator.h"
-#include "lib/worker.h"
 #include "share/stat/ob_dbms_stats_history_manager.h"
 #include "share/stat/ob_index_stats_estimator.h"
-#include "lib/timezone/ob_time_convert.h"
-#include "sql/das/ob_das_location_router.h"
-#include "sql/ob_sql_utils.h"
 #include "storage/ob_locality_manager.h"
-#include "share/stat/ob_opt_stat_gather_stat.h"
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "sql/privilege_check/ob_ora_priv_check.h"
-#include "sql/ob_result_set.h"
-#include "share/stat/ob_dbms_stats_maintenance_window.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "share/resource_manager/ob_resource_manager.h"
 #include "share/resource_manager/ob_resource_manager_proxy.h"
@@ -457,7 +447,7 @@ int ObDbmsStats::fast_gather_index_stats(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   is_all_fast_gather = true;
-  uint64_t index_tids[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1];
+  SMART_VAR(uint64_t[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1], index_tids) {
   int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1;
   share::schema::ObSchemaGetterGuard *schema_guard = ctx.get_virtual_table_ctx().schema_guard_;
   if (OB_FAIL(get_table_index_infos(schema_guard,
@@ -530,6 +520,7 @@ int ObDbmsStats::fast_gather_index_stats(ObExecContext &ctx,
       }
     }
   }
+  } // smart var
   return ret;
 }
 
@@ -1129,7 +1120,7 @@ int ObDbmsStats::delete_table_index_stats(sql::ObExecContext &ctx,
                                           const ObTableStatParam data_param)
 {
   int ret = OB_SUCCESS;
-  uint64_t index_tids[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1];
+  SMART_VAR(uint64_t[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1], index_tids) {
   int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1;
   if (OB_FAIL(get_table_index_infos(ctx.get_virtual_table_ctx().schema_guard_,
                                     ctx.get_my_session()->get_effective_tenant_id(),
@@ -1164,6 +1155,7 @@ int ObDbmsStats::delete_table_index_stats(sql::ObExecContext &ctx,
       }
     }
   }
+  } // smart var
   return ret;
 }
 
@@ -1620,7 +1612,7 @@ int ObDbmsStats::export_table_index_stats(sql::ObExecContext &ctx,
                                           const ObTableStatParam data_param)
 {
   int ret = OB_SUCCESS;
-  uint64_t index_tids[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1];
+  SMART_VAR(uint64_t[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1], index_tids) {
   int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1;
   if (OB_FAIL(get_table_index_infos(ctx.get_virtual_table_ctx().schema_guard_,
                                     ctx.get_my_session()->get_effective_tenant_id(),
@@ -1649,6 +1641,7 @@ int ObDbmsStats::export_table_index_stats(sql::ObExecContext &ctx,
       }
     }
   }
+  } // smart vars
   return ret;
 }
 
@@ -2019,7 +2012,7 @@ int ObDbmsStats::import_table_index_stats(sql::ObExecContext &ctx,
                                           const ObTableStatParam data_param)
 {
   int ret = OB_SUCCESS;
-  uint64_t index_tids[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1];
+  SMART_VAR(uint64_t[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1], index_tids) {
   int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1;
   if (OB_FAIL(get_table_index_infos(ctx.get_virtual_table_ctx().schema_guard_,
                                     ctx.get_my_session()->get_effective_tenant_id(),
@@ -2057,6 +2050,7 @@ int ObDbmsStats::import_table_index_stats(sql::ObExecContext &ctx,
       }
     }
   }
+  } // smart var
   return ret;
 }
 
@@ -2241,7 +2235,7 @@ int ObDbmsStats::lock_or_unlock_index_stats(sql::ObExecContext &ctx,
                                             bool is_lock_stats)
 {
   int ret = OB_SUCCESS;
-  uint64_t index_tids[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1];
+  SMART_VAR(uint64_t[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1], index_tids) {
   int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1;
   if (OB_FAIL(get_table_index_infos(ctx.get_virtual_table_ctx().schema_guard_,
                                     ctx.get_my_session()->get_effective_tenant_id(),
@@ -2271,6 +2265,7 @@ int ObDbmsStats::lock_or_unlock_index_stats(sql::ObExecContext &ctx,
       }
     }
   }
+  } // smart var
   return ret;
 }
 
@@ -3719,7 +3714,7 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
       }
     }
   }
-  uint64_t tids[OB_MAX_AUX_TABLE_PER_MAIN_TABLE];
+  SMART_VAR(uint64_t[OB_MAX_AUX_TABLE_PER_MAIN_TABLE], tids) {
   int64_t index_aux_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE;
   const ObTableSchema *index_schema = NULL;
   const uint64_t tenant_id = table_schema.get_tenant_id();
@@ -3769,6 +3764,7 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
       }
     }
   }
+  } // smart var
   return ret;
 }
 
@@ -6408,7 +6404,7 @@ int ObDbmsStats::get_index_schema(sql::ObExecContext &ctx,
   int ret = OB_SUCCESS;
   share::schema::ObSchemaGetterGuard *schema_guard = ctx.get_virtual_table_ctx().schema_guard_;
   index_schema = NULL;
-  uint64_t index_tids[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1];
+  SMART_VAR(uint64_t[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1], index_tids) {
   int64_t index_aux_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1;
   if (OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
@@ -6456,6 +6452,7 @@ int ObDbmsStats::get_index_schema(sql::ObExecContext &ctx,
       LOG_USER_ERROR(OB_TABLE_NOT_EXIST, to_cstring(index_name), to_cstring(index_name));
     }
   }
+  } // smart var
   return ret;
 }
 

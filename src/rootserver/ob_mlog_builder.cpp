@@ -12,10 +12,8 @@
 
 #define USING_LOG_PREFIX RS
 #include "rootserver/ob_mlog_builder.h"
-#include "rootserver/ob_ddl_service.h"
 #include "rootserver/ob_root_service.h"
 #include "storage/ddl/ob_ddl_lock.h"
-#include "share/schema/ob_schema_utils.h"
 
 namespace oceanbase
 {
@@ -607,6 +605,7 @@ int ObMLogBuilder::generate_mlog_schema(
       LOG_WARN("failed to set table options", KR(ret));
     } else {
       mlog_schema.set_micro_index_clustered(base_table_schema.get_micro_index_clustered());
+      mlog_schema.set_enable_macro_block_bloom_filter(base_table_schema.get_enable_macro_block_bloom_filter());
     }
   }
 

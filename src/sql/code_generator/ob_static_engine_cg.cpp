@@ -13,28 +13,22 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_static_engine_cg.h"
-#include "sql/optimizer/ob_logical_operator.h"
 #include "sql/optimizer/ob_log_group_by.h"
-#include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_sort.h"
 #include "sql/optimizer/ob_log_limit.h"
 #include "sql/optimizer/ob_log_sequence.h"
-#include "sql/optimizer/ob_log_join.h"
 #include "sql/optimizer/ob_log_join_filter.h"
 #include "sql/optimizer/ob_log_exchange.h"
 #include "sql/optimizer/ob_log_for_update.h"
 #include "sql/optimizer/ob_log_delete.h"
-#include "sql/optimizer/ob_log_insert.h"
 #include "sql/optimizer/ob_log_update.h"
 #include "sql/optimizer/ob_log_merge.h"
 #include "sql/optimizer/ob_log_expr_values.h"
 #include "sql/optimizer/ob_log_function_table.h"
 #include "sql/optimizer/ob_log_json_table.h"
 #include "sql/optimizer/ob_log_values.h"
-#include "sql/optimizer/ob_log_set.h"
 #include "sql/optimizer/ob_log_subplan_filter.h"
 #include "sql/optimizer/ob_log_subplan_scan.h"
-#include "sql/optimizer/ob_log_material.h"
 #include "sql/optimizer/ob_log_distinct.h"
 #include "sql/optimizer/ob_log_window_function.h"
 #include "sql/optimizer/ob_log_select_into.h"
@@ -50,17 +44,12 @@
 #include "sql/optimizer/ob_log_unpivot.h"
 #include "sql/optimizer/ob_log_insert_all.h"
 #include "sql/optimizer/ob_log_err_log.h"
-#include "sql/optimizer/ob_insert_log_plan.h"
 #include "sql/optimizer/ob_log_stat_collector.h"
-#include "sql/optimizer/ob_log_optimizer_stats_gathering.h"
 #include "sql/optimizer/ob_direct_load_optimizer_ctx.h"
 #include "sql/optimizer/ob_log_expand.h"
-#include "share/datum/ob_datum_funcs.h"
-#include "share/schema/ob_schema_mgr.h"
 #include "sql/engine/ob_operator_factory.h"
 #include "sql/engine/basic/ob_limit_op.h"
 #include "sql/engine/basic/ob_limit_vec_op.h"
-#include "sql/engine/basic/ob_material_op.h"
 #include "sql/engine/basic/ob_count_op.h"
 #include "sql/engine/basic/ob_values_op.h"
 #include "sql/engine/sort/ob_sort_op.h"
@@ -71,17 +60,11 @@
 #include "sql/engine/set/ob_hash_union_op.h"
 #include "sql/engine/set/ob_hash_intersect_op.h"
 #include "sql/engine/set/ob_hash_except_op.h"
-#include "sql/engine/table/ob_table_scan_op.h"
 #include "sql/engine/aggregate/ob_hash_distinct_op.h"
 #include "sql/engine/aggregate/ob_merge_distinct_op.h"
 #include "sql/engine/aggregate/ob_merge_distinct_vec_op.h"
-#include "share/schema/ob_schema_getter_guard.h"
 #include "sql/engine/basic/ob_expr_values_op.h"
-#include "sql/engine/dml/ob_table_insert_op.h"
-#include "sql/engine/expr/ob_expr_column_conv.h"
 #include "sql/engine/basic/ob_monitoring_dump_op.h"
-#include "sql/engine/px/ob_granule_iterator_op.h"
-#include "sql/engine/px/exchange/ob_px_receive_op.h"
 #include "sql/engine/px/exchange/ob_px_ms_receive_op.h"
 #include "sql/engine/px/exchange/ob_px_ms_receive_vec_op.h"
 #include "sql/engine/px/exchange/ob_px_dist_transmit_op.h"
@@ -91,7 +74,6 @@
 #include "sql/engine/px/exchange/ob_px_ordered_coord_op.h"
 #include "sql/engine/px/exchange/ob_px_ms_coord_op.h"
 #include "sql/engine/px/exchange/ob_px_ms_coord_vec_op.h"
-#include "sql/engine/px/ob_px_basic_info.h"
 #include "sql/engine/connect_by/ob_nl_cnnt_by_with_index_op.h"
 #include "sql/engine/join/ob_hash_join_op.h"
 #include "sql/engine/join/hash_join/ob_hash_join_vec_op.h"
@@ -102,7 +84,6 @@
 #include "sql/engine/subquery/ob_subplan_scan_op.h"
 #include "sql/engine/subquery/ob_unpivot_op.h"
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
-#include "sql/engine/aggregate/ob_scalar_aggregate_op.h"
 #include "sql/engine/aggregate/ob_merge_groupby_op.h"
 #include "sql/engine/aggregate/ob_hash_groupby_op.h"
 #include "sql/engine/join/ob_merge_join_op.h"
@@ -110,33 +91,22 @@
 #include "sql/executor/ob_task_spliter.h"
 #include "sql/engine/dml/ob_table_delete_op.h"
 #include "sql/engine/dml/ob_table_merge_op.h"
-#include "sql/resolver/dml/ob_merge_stmt.h"
-#include "sql/resolver/dml/ob_del_upd_stmt.h"
 #include "sql/engine/dml/ob_table_update_op.h"
 #include "sql/engine/dml/ob_table_lock_op.h"
 #include "sql/engine/table/ob_table_row_store_op.h"
 #include "sql/engine/dml/ob_table_insert_up_op.h"
 #include "sql/engine/dml/ob_table_replace_op.h"
-#include "sql/engine/window_function/ob_window_function_op.h"
 #include "sql/engine/window_function/ob_window_function_vec_op.h"
 #include "sql/engine/table/ob_row_sample_scan_op.h"
 #include "sql/engine/table/ob_block_sample_scan_op.h"
 #include "sql/engine/table/ob_table_scan_with_index_back_op.h"
 #include "sql/executor/ob_direct_receive_op.h"
-#include "sql/executor/ob_direct_transmit_op.h"
 #include "sql/engine/basic/ob_temp_table_access_op.h"
 #include "sql/engine/basic/ob_temp_table_insert_op.h"
-#include "sql/engine/basic/ob_temp_table_transformation_op.h"
 #include "sql/engine/basic/ob_temp_table_access_vec_op.h"
 #include "sql/engine/basic/ob_temp_table_insert_vec_op.h"
-#include "sql/engine/basic/ob_temp_table_transformation_vec_op.h"
-#include "common/ob_smart_call.h"
 #include "sql/engine/pdml/static/ob_px_multi_part_delete_op.h"
-#include "sql/engine/pdml/static/ob_px_multi_part_insert_op.h"
 #include "sql/engine/pdml/static/ob_px_multi_part_update_op.h"
-#include "sql/engine/basic/ob_pushdown_filter.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
-#include "share/schema/ob_schema_utils.h"
 #include "sql/engine/pdml/static/ob_px_sstable_insert_op.h"
 #include "sql/engine/dml/ob_err_log_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
@@ -147,22 +117,13 @@
 #include "sql/engine/dml/ob_table_insert_all_op.h"
 #include "sql/engine/basic/ob_stat_collector_op.h"
 #include "sql/engine/opt_statistics/ob_optimizer_stats_gathering_op.h"
-#include "lib/utility/ob_tracepoint.h"
-#include "sql/engine/cmd/ob_load_data_direct_impl.h"
-#include "observer/table_load/ob_table_load_struct.h"
-#include "sql/resolver/cmd/ob_load_data_stmt.h"
-#include "share/stat/ob_stat_define.h"
-#include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 #include "sql/engine/aggregate/ob_hash_distinct_vec_op.h"
 #include "sql/engine/aggregate/ob_scalar_aggregate_vec_op.h"
-#include "share/aggregate/processor.h"
 #include "share/vector/expr_cmp_func.h"
 #include "sql/engine/sort/ob_sort_vec_op.h"
-#include "sql/engine/px/p2p_datahub/ob_pushdown_topn_filter_msg.h"
 #include "sql/engine/set/ob_hash_union_vec_op.h"
 #include "sql/engine/set/ob_hash_intersect_vec_op.h"
 #include "sql/engine/set/ob_hash_except_vec_op.h"
-#include "sql/engine/join/ob_join_filter_material_control_info.h"
 #include "sql/engine/join/ob_merge_join_vec_op.h"
 #include "sql/resolver/mv/ob_mv_provider.h"
 #include "sql/engine/set/ob_merge_set_vec_op.h"
@@ -177,7 +138,6 @@
 #endif
 #include "sql/optimizer/ob_log_values_table_access.h"
 #include "sql/engine/basic/ob_values_table_access_op.h"
-#include "sql/engine/cmd/ob_table_direct_insert_service.h"
 #include "sql/engine/direct_load/ob_table_direct_insert_op.h"
 
 namespace oceanbase
@@ -411,8 +371,7 @@ int ObStaticEngineCG::disable_use_rich_format(const ObLogicalOperator &op, ObOpS
         || (NULL != spec.get_parent() && PHY_DELETE == spec.get_parent()->type_)
         || (static_cast<ObTableScanSpec &>(spec)).tsc_ctdef_.scan_ctdef_.is_get_
         || tsc.is_text_retrieval_scan()
-        || tsc.is_tsc_with_doc_id()
-        || tsc.is_tsc_with_vid()
+        || tsc.is_tsc_with_domain_id()
         || tsc.has_func_lookup()) {
       use_rich_format = false;
       LOG_DEBUG("tsc disable use rich format", K(tsc.get_index_back()), K(tsc.use_batch()),
@@ -960,8 +919,7 @@ int ObStaticEngineCG::generate_calc_exprs(
             && T_PSEUDO_PARTITION_LIST_COL != raw_expr->get_expr_type()
             && T_ORA_ROWSCN != raw_expr->get_expr_type()
             && !(raw_expr->is_const_expr() || raw_expr->has_flag(IS_DYNAMIC_USER_VARIABLE))
-            && !(T_FUN_SYS_PART_HASH == raw_expr->get_expr_type() || T_FUN_SYS_PART_KEY == raw_expr->get_expr_type())
-            && !(raw_expr->is_vector_sort_expr())) {
+            && !(T_FUN_SYS_PART_HASH == raw_expr->get_expr_type() || T_FUN_SYS_PART_KEY == raw_expr->get_expr_type())) {
           if (raw_expr->is_calculated()) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("expr is not from the child_op_output but it has been caculated already",
@@ -973,6 +931,9 @@ int ObStaticEngineCG::generate_calc_exprs(
         }
 
         if (OB_FAIL(ret)) {
+        } else if (raw_expr->is_vector_sort_expr() && raw_expr->has_flag(IS_CUT_CALC_EXPR)) {
+          raw_expr->set_is_calculated(true);
+          FLOG_INFO("for distance needn't calc", K(ret));
         } else if (OB_FAIL(calc_raw_exprs.push_back(raw_expr))) {
           LOG_WARN("fail to push output expr", K(ret));
         }
@@ -3929,39 +3890,30 @@ int ObStaticEngineCG::generate_spec(ObLogJoinFilter &op, ObJoinFilterSpec &spec,
       ObLogJoin &join_op = static_cast<ObLogJoin &>(*op.get_parent());
       const common::ObIArray<ObRawExpr *> &equal_join_conditions =
           join_op.get_equal_join_conditions();
-
-      if (OB_FAIL(spec.full_hash_join_keys_.prepare_allocate(equal_join_conditions.count()))) {
+      const common::ObIArray<ObRawExpr *> &all_join_key_left_exprs =
+          op.get_all_join_key_left_exprs();
+      if (equal_join_conditions.count() != all_join_key_left_exprs.count()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unmatched expr count", K(equal_join_conditions.count()),
+                 K(all_join_key_left_exprs.count()), K(spec.get_id()));
+      } else if (OB_FAIL(spec.full_hash_join_keys_.prepare_allocate(equal_join_conditions.count()))) {
         LOG_WARN("failed to prepare_allocate full_hash_join_keys", K(ret));
       } else if (OB_FAIL(spec.hash_join_is_ns_equal_cond_.prepare_allocate(
                      equal_join_conditions.count()))) {
         LOG_WARN("failed to prepare_allocate hash_join_is_ns_equal_cond_", K(ret));
       }
 
-      for (int64_t i = 0; OB_SUCC(ret) && i < equal_join_conditions.count(); ++i) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < all_join_key_left_exprs.count(); ++i) {
+        ObRawExpr *left_raw_expr = all_join_key_left_exprs.at(i);
         ObExpr *left_expr = nullptr;
-        bool is_opposite = false;
-        ObExpr *equal_join_cond = static_cast<ObExpr *>(
-            ObStaticEngineExprCG::get_left_value_rt_expr(*equal_join_conditions.at(i)));
-        if (OB_ISNULL(equal_join_cond)) {
+        if (OB_FAIL(generate_rt_expr(*left_raw_expr, left_expr))) {
+          LOG_WARN("failed to generate_rt_expr");
+        } else if (OB_ISNULL(left_expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexprected null equal_join_cond");
-        } else if (2 != equal_join_cond->arg_cnt_) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected status: join keys must have 2 arguments");
-        } else if (OB_FAIL(calc_equal_cond_opposite(join_op, *equal_join_conditions.at(i),
-                                                    is_opposite))) {
-          LOG_WARN("failed to calc equal condition opposite", K(ret));
-        } else {
-          if (is_opposite) {
-            left_expr = equal_join_cond->args_[1];
-          } else {
-            left_expr = equal_join_cond->args_[0];
-          }
-        }
-        if (OB_FAIL(ret)) {
+          LOG_WARN("unexprected null left_expr");
         } else {
           spec.full_hash_join_keys_.at(i) = left_expr;
-          if (T_OP_NSEQ == equal_join_cond->type_) {
+          if (T_OP_NSEQ == equal_join_conditions.at(i)->get_expr_type()) {
             spec.hash_join_is_ns_equal_cond_.at(i) = true;
           } else {
             spec.hash_join_is_ns_equal_cond_.at(i) = false;
@@ -5649,6 +5601,7 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
           LOG_WARN("unexpected error, parser name is empty", K(ret), KPC(ddl_table_schema));
         } else {
           OZ(ob_write_string(phy_plan_->get_allocator(), ddl_table_schema->get_parser_name_str(), spec.parser_name_));
+          OZ(ob_write_string(phy_plan_->get_allocator(), ddl_table_schema->get_parser_property_str(), spec.parser_properties_));
         }
       }
     }

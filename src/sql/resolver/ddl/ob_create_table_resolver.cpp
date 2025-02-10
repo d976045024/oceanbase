@@ -11,36 +11,15 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
-#include "lib/compress/ob_compressor_pool.h"
 #include "sql/resolver/ddl/ob_create_table_resolver.h"
-#include <algorithm>
-#include "lib/number/ob_number_v2.h"
-#include "lib/string/ob_sql_string.h"
-#include "common/rowkey/ob_rowkey.h"
-#include "common/sql_mode/ob_sql_mode_utils.h"
-#include "common/ob_store_format.h"
-#include "share/schema/ob_table_schema.h"
-#include "share/config/ob_server_config.h"
 #include "share/ob_fts_index_builder_util.h"
-#include "sql/resolver/ddl/ob_create_table_stmt.h"
-#include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "sql/resolver/expr/ob_raw_expr_resolver_impl.h"
-#include "sql/resolver/expr/ob_raw_expr_part_func_checker.h"
-#include "sql/session/ob_sql_session_info.h"
-#include "sql/resolver/ob_resolver_utils.h"
 #include "sql/rewrite/ob_transform_utils.h"
-#include "sql/ob_sql_utils.h"
 #include "share/ob_index_builder_util.h"
-#include "share/ob_cluster_version.h"
-#include "share/schema/ob_part_mgr_util.h"
-#include "sql/resolver/dml/ob_select_resolver.h"
-#include "sql/printer/ob_select_stmt_printer.h"
 #include "observer/ob_server.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
 #include "sql/resolver/cmd/ob_help_resolver.h"
-#include "lib/charset/ob_template_helper.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "share/vector_index/ob_vector_index_util.h"
+#include "share/ob_vec_index_builder_util.h"
 
 
 namespace oceanbase
@@ -65,7 +44,8 @@ ObCreateTableResolver::ObCreateTableResolver(ObResolverParams &params)
       cur_udt_set_id_(0),
       vec_index_col_ids_(),
       has_vec_index_(false),
-      has_fts_index_(false)
+      has_fts_index_(false),
+      has_multivalue_index_(false)
 {
 }
 
@@ -455,6 +435,12 @@ int ObCreateTableResolver::set_default_micro_index_clustered_(share::schema::ObT
   return ret;
 }
 
+int ObCreateTableResolver::set_default_enable_macro_block_bloom_filter_(share::schema::ObTableSchema &table_schema)
+{
+  table_schema.set_enable_macro_block_bloom_filter(false);
+  return OB_SUCCESS;
+}
+
 int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
@@ -688,6 +674,8 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(set_default_micro_index_clustered_(table_schema))) {
               SQL_RESV_LOG(WARN, "set table options (micro_index_clustered) failed", K(ret));
+            } else if (OB_FAIL(set_default_enable_macro_block_bloom_filter_(table_schema))) {
+              SQL_RESV_LOG(WARN, "set table options (enable_macro_block_bloom_filter) failed", K(ret));
             } else if (OB_FAIL(resolve_table_options(create_table_node->children_[4], false))) {
               SQL_RESV_LOG(WARN, "resolve table options failed", K(ret));
             } else if (OB_FAIL(set_table_option_to_schema(table_schema))) {
@@ -2472,7 +2460,7 @@ int ObCreateTableResolver::generate_index_arg()
           LOG_WARN("tenant is not user tenant vector index not supported", K(ret), K(tenant_id));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "not user tenant create vector index is");
         } else {
-          type = INDEX_TYPE_VEC_ROWKEY_VID_LOCAL;
+          type = INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL; // 需要考虑ivf和hnsw这两种模式，其中ivf索引又分成ivfflat，ivfsq8，ivfpq三类
         }
       } else if (FTS_KEY == index_keyname_) {
         if (tenant_data_version < DATA_VERSION_4_3_1_0) {
@@ -2482,6 +2470,7 @@ int ObCreateTableResolver::generate_index_arg()
         } else if (global_) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("not support global fts index now", K(ret));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "global fulltext index is");
         } else {
           // set type to fts_doc_rowkey first, append other fts arg later
           type = INDEX_TYPE_FTS_INDEX_LOCAL;
@@ -2619,6 +2608,7 @@ int ObCreateTableResolver::set_index_option_to_arg()
       SQL_RESV_LOG(WARN, "set comment str failed", K(ret));
     } else {
       index_arg_.index_option_.parser_name_ = parser_name_;
+      index_arg_.index_option_.parser_properties_ = parser_properties_;
       index_arg_.index_option_.row_store_type_  = row_store_type_;
       index_arg_.index_option_.store_format_ = store_format_;
       index_arg_.with_rowid_ = with_rowid_;
@@ -2702,6 +2692,11 @@ int ObCreateTableResolver::resolve_index(
         SQL_RESV_LOG(WARN, "resolve index node failed", K(ret));
       } else { /*do nothing*/ }
     }
+    if (OB_SUCC(ret) && (has_fts_index_ || has_multivalue_index_ || has_vec_index_)) {
+      if (OB_FAIL(check_building_domain_index_legal())) {
+        LOG_WARN("fail to check building domain index legal", K(ret));
+      }
+    }
     current_index_name_set_.reset();
   }
 
@@ -2767,12 +2762,20 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
         bool is_multi_value_index = false;
         const bool is_vec_index = (index_keyname_ == INDEX_KEYNAME::VEC_KEY);
         const bool is_fts_index = (index_keyname_ == INDEX_KEYNAME::FTS_KEY);
+        uint64_t tenant_data_version = 0;
+        bool is_support = false;
         if (OB_FAIL(ret)) {
+        } else if (OB_ISNULL(session_info_)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected null", K(ret));
+        } else if (OB_FAIL(GET_MIN_DATA_VERSION(session_info_->get_effective_tenant_id(), tenant_data_version))) {
+          LOG_WARN("get tenant data version failed", K(ret));
+        } else if (FALSE_IT(is_support = tenant_data_version >= DATA_VERSION_4_3_5_1)) {
         } else if (is_vec_index && index_column_list_node->num_child_ >= 2) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("multi column of vector index is not support yet", K(ret), K(index_column_list_node->num_child_));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "multi vector index column is");
-        } else if ((is_vec_index && has_fts_index_) || (is_fts_index && has_vec_index_)) {
+        } else if (!is_support && ((is_vec_index && has_fts_index_) || (is_fts_index && has_vec_index_))) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("vector index and fts coexist in main table is not support yet", K(ret), K(index_column_list_node->num_child_));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "vector index and fts coexist in main table is");
@@ -2928,6 +2931,8 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
                 ret = OB_NOT_SUPPORTED;
                 LOG_WARN("more than one vector index on same column is not supported", K(ret), K(vec_index_col_id), K(vec_index_col_ids_));
                 LOG_USER_ERROR(OB_NOT_SUPPORTED, "more than one vector index on same column is");
+              } else if (OB_FAIL(set_vec_column_name(column_schema->get_column_name()))) {
+                LOG_WARN("fail to set vec column name", K(ret));
               }
             }
             if (OB_SUCC(ret)) {
@@ -3198,15 +3203,19 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
         }
         if (OB_SUCC(ret)) {
           if (is_vec_index(index_arg_.index_type_)) {
-            // set index_params to create_index_arg, then will pass to index_arg_list
-            create_index_arg.index_schema_.set_index_params(index_params_);
-            if (OB_FAIL(ObDDLResolver::append_vec_args(resolve_result,
-                                                       create_index_arg,
-                                                       have_generate_vec_arg_,
-                                                       resolve_results,
-                                                       index_arg_list,
-                                                       allocator_,
-                                                       session_info_))) {
+            // refresh vector index type
+            if (!is_vec_index(vec_index_type_)) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("unexpected index type", KR(ret), K(vec_index_type_));
+            } else if (FALSE_IT(create_index_arg.index_type_ = vec_index_type_)) {
+            } else if (FALSE_IT(create_index_arg.index_schema_.set_index_params(index_params_))) {
+            } else if (OB_FAIL(ObVecIndexBuilderUtil::append_vec_args(resolve_result,
+                                                              create_index_arg,
+                                                              have_generate_vec_arg_,
+                                                              resolve_results,
+                                                              index_arg_list,
+                                                              allocator_,
+                                                              session_info_))) {
               LOG_WARN("failed to append vec args", K(ret));
             } else if (OB_FAIL(vec_index_col_ids_.push_back(vec_index_col_id))) {
               LOG_WARN("fail to push back vec index col id", K(ret));
@@ -3214,7 +3223,8 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
               has_vec_index_ = true;
             }
           } else if (is_fts_index(index_arg_.index_type_)) {
-            if (OB_FAIL(ObDDLResolver::append_fts_args(resolve_result,
+            if (OB_FAIL(ObDDLResolver::append_fts_args(tbl_schema,
+                                                       resolve_result,
                                                        create_index_arg,
                                                        have_generate_fts_arg_,
                                                        resolve_results,
@@ -3232,6 +3242,8 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
                                                               index_arg_list,
                                                               allocator_))) {
               LOG_WARN("failed to append fts args", K(ret));
+            } else {
+              has_multivalue_index_ = true;
             }
           } else {
             if (OB_FAIL(resolve_results.push_back(resolve_result))) {
@@ -3656,6 +3668,40 @@ int ObCreateTableResolver::check_max_row_data_length(const ObTableSchema &table_
     if (OB_SUCC(ret) && (row_data_length += length) > OB_MAX_USER_ROW_LENGTH) {
       ret = OB_ERR_TOO_BIG_ROWSIZE;
       SQL_RESV_LOG(WARN, "too big rowsize", KR(ret), K(is_oracle_mode), K(i), K(row_data_length), K(length));
+    }
+  }
+  return ret;
+}
+
+int ObCreateTableResolver::check_building_domain_index_legal()
+{
+  int ret = OB_SUCCESS;
+  if (!index_aux_name_set_.created() &&
+      OB_FAIL(index_aux_name_set_.create(common::OB_MAX_COLUMN_NUMBER))) {
+    LOG_WARN("fail to init index aux name set", K(ret));
+  } else {
+    ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
+    const ObSArray<obrpc::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
+    for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.count(); ++i) {
+      const obrpc::ObCreateIndexArg &index_arg = index_arg_list.at(i);
+      ObIndexNameHashWrapper index_name_key(index_arg.index_name_);
+      if (OB_FAIL(index_aux_name_set_.exist_refactored(index_name_key))) {
+        if (OB_HASH_EXIST == ret) {
+          ret = OB_ERR_KEY_NAME_DUPLICATE;
+          LOG_USER_ERROR(OB_ERR_KEY_NAME_DUPLICATE,
+              index_arg.index_name_.length(), index_arg.index_name_.ptr());
+          LOG_WARN("there is duplicate index aux name", K(ret), K(index_arg.index_name_));
+        } else if (OB_HASH_NOT_EXIST == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to search index aux name set", K(ret), K(index_arg.index_name_));
+        }
+        if (OB_SUCC(ret)) {
+          if (OB_FAIL(index_aux_name_set_.set_refactored(index_name_key))) {
+            LOG_WARN("fail to insert index aux name set", K(ret), K(index_arg.index_name_));
+          }
+        }
+      }
     }
   }
   return ret;

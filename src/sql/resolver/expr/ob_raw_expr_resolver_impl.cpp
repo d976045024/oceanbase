@@ -12,29 +12,12 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_raw_expr_resolver_impl.h"
-#include "common/ob_smart_call.h"
-#include "common/ob_common_utility.h"
-#include "ob_raw_expr_info_extractor.h"
-#include "sql/parser/sql_parser_base.h"
-#include "sql/resolver/ob_column_ref.h"
-#include "sql/resolver/ob_resolver_utils.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "sql/resolver/dml/ob_select_stmt.h"
-#include "sql/parser/ob_parser_utils.h"
-#include "sql/engine/expr/ob_expr_case.h"
 #include "lib/json/ob_json_print_utils.h"
-#include "lib/string/ob_sql_string.h"
-#include "pl/ob_pl_type.h"
 #include "pl/ob_pl_resolver.h"
-#include "common/ob_smart_call.h"
-#include "share/schema/ob_udt_info.h"
 #ifdef OB_BUILD_ORACLE_PL
 #include "pl/ob_pl_udt_object_manager.h"
 #endif
-#include "sql/resolver/ob_stmt.h"
-#include "sql/resolver/dml/ob_del_upd_stmt.h"
-#include "deps/oblib/src/lib/json_type/ob_json_path.h"
-#include "share/resource_manager/ob_resource_manager.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
 
 namespace oceanbase
@@ -1310,6 +1293,9 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
         OZ (process_vector_func_node(node, expr));
         break;
       }
+      case T_FUNC_SYS_ARRAY_FIRST:
+      case T_FUNC_SYS_ARRAY_SORTBY:
+      case T_FUNC_SYS_ARRAY_FILTER:
       case T_FUNC_SYS_ARRAY_MAP: {
         OZ (process_array_map_func_node(node, expr));
         break;
@@ -3210,10 +3196,10 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
             OX (c_expr = static_cast<ObConstRawExpr*>(original_expr));
           }
         } else if (val.get_unknown() >= ctx_.param_list_->count()) {
-          ret = OB_ERR_UNEXPECTED;
+          ret = OB_ERR_NOT_ALL_VARIABLE_BIND;
           LOG_WARN("question mark index out of param list count",
                    "index", val.get_unknown(), "param_count", ctx_.param_list_->count());
-        } else { //execute stmt阶段，注：这里没有设置c_expr的accuracy会不会有问题
+        } else { //带参数prepare or execute stmt阶段，注：这里没有设置c_expr的accuracy会不会有问题
           const ObObjParam &param = ctx_.param_list_->at(val.get_unknown());
           c_expr->set_is_literal_bool(param.is_boolean());
           if (param.is_ext()) {
@@ -3587,7 +3573,7 @@ int ObRawExprResolverImpl::extract_var_exprs(ObRawExpr *expr, ObIArray<ObVarRawE
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
-      if (expr->get_expr_type() == T_FUNC_SYS_ARRAY_MAP && i == 0) {
+      if (IS_ARRAY_MAP_OP(expr->get_expr_type())&& i == 0) {
       } else if (OB_FAIL(SMART_CALL(extract_var_exprs(expr->get_param_expr(i), var_exprs)))) {
         LOG_WARN("Failed to extract var exprs", K(ret));
       }
@@ -3629,7 +3615,7 @@ int ObRawExprResolverImpl::check_replace_lambda_params_node(const ParseNode *par
     } else {
       for (uint32_t i = 0; OB_SUCC(ret) && i < curr_node->num_child_; ++i) {
         if (curr_node->children_[i] == NULL) {
-        } else if (curr_node->type_ == T_FUNC_SYS_ARRAY_MAP && i == 0) {
+        } else if (IS_ARRAY_MAP_OP(curr_node->type_) && i == 0) {
         } else if (OB_FAIL(check_replace_lambda_params_node(params_node, const_cast<ParseNode *>(curr_node->children_[i])))) {
           LOG_WARN("fail to replace lambda params", K(ret));
         }
@@ -7749,9 +7735,10 @@ int ObRawExprResolverImpl::process_match_against(const ParseNode *node, ObRawExp
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "non-const search query");
       LOG_WARN("search query is not const expr", K(ret));
-    } else if (ObMatchAgainstMode::NATURAL_LANGUAGE_MODE != static_cast<ObMatchAgainstMode>(node->value_)) {
+    }  else if (ObMatchAgainstMode::NATURAL_LANGUAGE_MODE != static_cast<ObMatchAgainstMode>(node->value_) &&
+                ObMatchAgainstMode::BOOLEAN_MODE != static_cast<ObMatchAgainstMode>(node->value_)) {
       ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "search modes other than NATURAL_LANGUAGE_MODE");
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "search modes other than NATURAL_LANGUAGE_MODE or BOOLEAN_MODE");
       LOG_WARN("unsupported match against mode", K(ret), K(node->value_));
     } else {
       match_against->set_search_key(search_keywords);

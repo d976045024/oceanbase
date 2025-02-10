@@ -10,22 +10,9 @@
  * See the Mulan PubL v2 for more details.
  */
 #define USING_LOG_PREFIX SQL
-#include "share/external_table/ob_external_table_file_mgr.h"
 #include "share/external_table/ob_external_table_utils.h"
 
-#include "common/ob_range.h"
-#include "common/object/ob_object.h"
-#include "share/external_table/ob_external_table_file_mgr.h"
-#include "sql/engine/expr/ob_expr_regexp_context.h"
-#include "sql/engine/expr/ob_expr_util.h"
-#include "sql/engine/ob_exec_context.h"
-#include "sql/engine/table/ob_external_table_access_service.h"
-#include "sql/ob_sql_utils.h"
-#include "sql/rewrite/ob_query_range.h"
-#include "share/backup/ob_backup_io_adapter.h"
-#include "deps/oblib/src/lib/net/ob_addr.h"
 #include "share/external_table/ob_external_table_file_rpc_processor.h"
-#include "share/external_table/ob_external_table_file_rpc_proxy.h"
 #include "sql/executor/ob_task_spliter.h"
 #include "sql/engine/table/ob_csv_table_row_iter.h"
 #include "share/config/ob_server_config.h"
@@ -410,7 +397,7 @@ int ObExternalPathFilter::is_filtered(const ObString &path, bool &is_filtered)
                                                    out_text,
                                                    CS_TYPE_UTF16_BIN,
                                                    temp_allocator_))) {
-    LOG_WARN("convert charset failed", K(ret));
+    LOG_WARN("convert charset failed", K(ret), K(path));
   } else if (OB_FAIL(regex_ctx_.match(temp_allocator_, out_text, CS_TYPE_UTF16_BIN, 0, match))) {
     LOG_WARN("regex match failed", K(ret));
   }

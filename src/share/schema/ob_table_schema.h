@@ -446,7 +446,7 @@ public:
       uint32_t auto_increment_mode_: TM_TABLE_AUTO_INCREMENT_MODE_BITS;
       uint32_t rowid_mode_: TM_TABLE_ROWID_MODE_BITS;
       uint32_t view_column_filled_flag_ : TM_VIEW_COLUMN_FILLED_BITS;
-      uint32_t mv_container_table_flag_ : TM_MV_CONTAINER_TABLE_BITS;
+      uint32_t mv_container_table_flag_ : TM_MV_CONTAINER_TABLE_BITS; // FARM COMPAT WHITELIST
       uint32_t mv_available_flag_ : TM_MV_AVAILABLE_BITS;
       uint32_t table_referenced_by_mv_flag_ : TM_TABLE_REFERENCED_BY_MV_BITS;
       uint32_t mv_enable_query_rewrite_flag_ : TM_MV_ENABLE_QUERY_REWRITE_BITS;
@@ -1069,7 +1069,25 @@ public:
   inline static bool is_spatial_index(const ObIndexType index_type);
   inline bool is_vec_index() const;
   inline static bool is_vec_index(const ObIndexType index_type);
+  inline bool is_vec_domain_index() const;
   inline bool is_built_in_vec_index() const;
+  inline bool is_vec_hnsw_index() const;
+  inline bool is_vec_ivf_index() const;
+  inline bool is_vec_ivfpq_index() const;
+  inline bool is_vec_ivfsq8_index() const;
+  inline bool is_vec_ivfflat_index() const;
+  inline bool is_vec_ivfflat_centroid_index() const;
+  inline bool is_vec_ivfflat_cid_vector_index() const;
+  inline bool is_vec_ivfflat_rowkey_cid_index() const;
+  inline bool is_vec_ivfsq8_centroid_index() const;
+  inline bool is_vec_ivfsq8_cid_vector_index() const;
+  inline bool is_vec_ivfsq8_meta_index() const;
+  inline bool is_vec_ivfsq8_rowkey_cid_index() const;
+  inline bool is_vec_ivfpq_centroid_index() const;
+  inline bool is_vec_ivf_centroid_index() const;
+  inline bool is_vec_ivfpq_pq_centroid_index() const;
+  inline bool is_vec_ivfpq_code_index() const;
+  inline bool is_vec_ivfpq_rowkey_cid_index() const;
   inline bool is_vec_rowkey_vid_type() const;
   inline bool is_vec_vid_rowkey_type() const;
   inline bool is_vec_delta_buffer_type() const;
@@ -1328,6 +1346,13 @@ public:
       index_attributes_set_ |= (1 << INDEX_ROW_MOVEABLE);
     }
   }
+  inline void set_is_in_deleting(const bool is_deleting)
+  {
+    index_attributes_set_ &= ~((uint64_t)(1) << INDEX_IS_IN_DELETING);
+    if (is_deleting) {
+      index_attributes_set_ |= (1 << INDEX_IS_IN_DELETING);
+    }
+  }
   inline void set_rowkey_column_num(const int64_t rowkey_column_num) { rowkey_column_num_ = rowkey_column_num; }
   inline void set_index_column_num(const int64_t index_column_num) { index_column_num_ = index_column_num; }
   inline void set_rowkey_split_pos(int64_t pos) { rowkey_split_pos_ = pos;}
@@ -1392,7 +1417,9 @@ public:
   int add_subpartition_key(const common::ObString &column_name);
   int add_zone(const common::ObString &zone);
   int set_view_definition(const common::ObString &view_definition);
+  int set_parser_name_and_properties(const common::ObString &parser_name, const common::ObString &parser_properties);
   int set_parser_name(const common::ObString &parser_name) { return deep_copy_str(parser_name, parser_name_); }
+  int set_parser_properties(const common::ObString &parser_properties) { return deep_copy_str(parser_properties, parser_properties_); }
   int set_rowkey_info(const ObColumnSchemaV2 &column);
   int set_foreign_key_infos(const common::ObIArray<ObForeignKeyInfo> &foreign_key_infos_);
   void clear_foreign_key_infos();
@@ -1520,6 +1547,7 @@ public:
   inline bool is_read_only() const { return read_only_; }
   inline const char *get_parser_name() const { return extract_str(parser_name_); }
   inline const common::ObString &get_parser_name_str() const { return parser_name_; }
+  inline const common::ObString &get_parser_property_str() const { return parser_properties_; }
 
   inline uint64_t get_index_attributes_set() const { return index_attributes_set_; }
   inline int64_t get_dop() const  { return table_dop_; }
@@ -1545,6 +1573,10 @@ public:
   inline bool is_enable_row_movement() const
   {
     return 0 != (index_attributes_set_ & ((uint64_t)(1) << INDEX_ROW_MOVEABLE));
+  }
+  inline bool is_in_deleting() const
+  {
+    return 0 != (index_attributes_set_ & ((uint64_t)(1) << INDEX_IS_IN_DELETING));
   }
   inline void reset_rowkey_info()
   {
@@ -1628,8 +1660,8 @@ public:
   int get_fulltext_column_ids(uint64_t &doc_id_col_id, uint64_t &ft_col_id) const;
   int get_multivalue_column_id(uint64_t &multivalue_col_id) const;
 
-  int get_vec_index_column_id(uint64_t &vec_vector_id) const;
-  int get_vec_index_vid_col_id(uint64_t &vec_id_col_id) const;
+  int get_vec_index_column_id(uint64_t &with_cascaded_info_column_id) const;
+  int get_vec_index_vid_col_id(uint64_t &vec_id_col_id, bool is_cid = false) const;
   // get columns for building rowid
   int get_column_ids_serialize_to_rowid(common::ObIArray<uint64_t> &col_ids,
                                         int64_t &rowkey_cnt) const;
@@ -1917,7 +1949,7 @@ public:
   int check_has_local_index(ObSchemaGetterGuard &schema_guard, bool &has_local_index) const;
   int check_has_fts_index(ObSchemaGetterGuard &schema_guard, bool &has_fts_index) const;
   int check_has_multivalue_index(ObSchemaGetterGuard &schema_guard, bool &has_multivalue_index) const;
-  int check_has_vector_index(ObSchemaGetterGuard &schema_guard, bool &has_vector_index) const;
+  int check_has_hnsw_vector_index(ObSchemaGetterGuard &schema_guard, bool &has_vector_index) const;
   int is_real_unique_index_column(ObSchemaGetterGuard &schema_guard,
                                   uint64_t column_id,
                                   bool &is_uni) const;
@@ -1930,19 +1962,22 @@ public:
   int get_doc_id_rowkey_tid(uint64_t &doc_id_rowkey_tid) const;
   int get_rowkey_doc_id_tid(uint64_t &rowkey_doc_id_tid) const;
   int get_vec_id_rowkey_tid(uint64_t &doc_id_rowkey_tid) const;
+  int delete_column_update_prev_id(ObColumnSchemaV2 *column);
   void set_aux_lob_meta_tid(const uint64_t& table_id) { aux_lob_meta_tid_ = table_id; }
   void set_aux_lob_piece_tid(const uint64_t& table_id) { aux_lob_piece_tid_ = table_id; }
   int get_rowkey_doc_tid(uint64_t &index_table_id) const;
   int get_rowkey_vid_tid(uint64_t &index_table_id) const;
   uint64_t get_aux_lob_meta_tid() const { return aux_lob_meta_tid_; }
   uint64_t get_aux_lob_piece_tid() const { return aux_lob_piece_tid_; }
-  bool has_lob_column() const;
+  bool has_lob_column(const bool ignore_unused_column) const;
   int64_t get_lob_columns_count() const;
   bool has_lob_aux_table() const { return (aux_lob_meta_tid_ != OB_INVALID_ID && aux_lob_piece_tid_ != OB_INVALID_ID); }
   bool has_mlog_table() const { return (OB_INVALID_ID != mlog_tid_); }
   bool required_by_mview_refresh() const { return has_mlog_table() || table_referenced_by_fast_lsm_mv(); }
   // ObColumnIterByPrevNextID's column id is not in order, it means table has add column instant and return true
   int has_add_column_instant(bool &add_column_instant) const;
+  int get_unused_column_ids(common::ObIArray<uint64_t> &column_ids) const;
+  int has_unused_column(bool &has_unused_column) const;
   inline void add_table_flag(uint64_t flag) { table_flags_ |= flag; }
   inline void del_table_flag(uint64_t flag) { table_flags_ &= ~flag; }
   inline void add_or_del_table_flag(uint64_t flag, bool is_add)
@@ -2009,8 +2044,6 @@ protected:
   int add_col_to_column_array(ObColumnSchemaV2 *column);
   int remove_col_from_column_array(const ObColumnSchemaV2 *column);
   int add_column_update_prev_id(ObColumnSchemaV2 *local_column);
-  int delete_column_update_prev_id(ObColumnSchemaV2 *column);
-
   int assign_column_group(const ObTableSchema &other);
   int do_add_column_group(const ObColumnGroupSchema &other);
   int add_column_group_to_array(ObColumnGroupSchema *column_group);
@@ -2018,9 +2051,7 @@ protected:
   int add_column_group_to_hash_array(ObColumnGroupSchema *column_group,
                                      const KeyType &key,
                                      ArrayType *&array);
-
 protected:
-  // constraint related
   int add_cst_to_cst_array(ObConstraint *cst);
   int remove_cst_from_cst_array(const ObConstraint *cst);
   //label security
@@ -2115,6 +2146,7 @@ protected:
   common::ObCompressorType compressor_type_;
   common::ObString expire_info_;
   common::ObString parser_name_; //fulltext index parser name
+  common::ObString parser_properties_; // fulltext index parser properties
   common::ObRowStoreType row_store_type_;
   common::ObStoreFormatType store_format_;
   int64_t storage_format_version_;
@@ -2300,9 +2332,99 @@ inline bool ObSimpleTableSchemaV2::is_vec_index(const ObIndexType index_type)
   return share::schema::is_vec_index(index_type);
 }
 
+inline bool ObSimpleTableSchemaV2::is_vec_hnsw_index() const
+{
+  return share::schema::is_vec_hnsw_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivf_index() const
+{
+  return share::schema::is_vec_ivf_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivfflat_index() const
+{
+  return share::schema::is_vec_ivfflat_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivfsq8_index() const
+{
+  return share::schema::is_vec_ivfsq8_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivfpq_index() const
+{
+  return share::schema::is_vec_ivfpq_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_domain_index() const
+{
+  return share::schema::is_vec_domain_index(index_type_);
+}
+
 inline bool ObSimpleTableSchemaV2::is_built_in_vec_index() const
 {
   return share::schema::is_built_in_vec_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivfflat_centroid_index() const
+{
+  return share::schema::is_vec_ivfflat_centroid_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivfsq8_centroid_index() const
+{
+  return share::schema::is_vec_ivfsq8_centroid_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivfpq_centroid_index() const
+{
+  return share::schema::is_vec_ivfpq_centroid_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivf_centroid_index() const
+{
+  return share::schema::is_local_vec_ivf_centroid_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivfflat_cid_vector_index() const
+{
+  return share::schema::is_vec_ivfflat_cid_vector_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivfflat_rowkey_cid_index() const
+{
+  return share::schema::is_vec_ivfflat_rowkey_cid_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivfsq8_cid_vector_index() const
+{
+  return share::schema::is_vec_ivfsq8_cid_vector_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivfsq8_meta_index() const
+{
+  return share::schema::is_vec_ivfsq8_meta_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivfsq8_rowkey_cid_index() const
+{
+  return share::schema::is_vec_ivfsq8_rowkey_cid_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivfpq_pq_centroid_index() const
+{
+  return share::schema::is_vec_ivfpq_pq_centroid_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivfpq_code_index() const
+{
+  return share::schema::is_vec_ivfpq_code_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_vec_ivfpq_rowkey_cid_index() const
+{
+  return share::schema::is_vec_ivfpq_rowkey_cid_index(index_type_);
 }
 
 inline bool ObSimpleTableSchemaV2::is_vec_rowkey_vid_type() const
@@ -2403,7 +2525,12 @@ inline bool ObSimpleTableSchemaV2::is_domain_index(const ObIndexType index_type)
          share::schema::is_multivalue_index_aux(index_type) ||
          share::schema::is_vec_index_id_type(index_type) ||
          share::schema::is_vec_delta_buffer_type(index_type) ||
-         share::schema::is_vec_index_snapshot_data_type(index_type);
+         share::schema::is_vec_index_snapshot_data_type(index_type) ||
+         share::schema::is_vec_ivfpq_pq_centroid_index(index_type) ||
+         share::schema::is_vec_ivfsq8_meta_index(index_type) ||
+         share::schema::is_vec_ivfflat_centroid_index(index_type) ||
+         share::schema::is_vec_ivfpq_centroid_index(index_type) ||
+         share::schema::is_vec_ivfsq8_centroid_index(index_type);
 }
 
 inline bool ObSimpleTableSchemaV2::is_fts_or_multivalue_index() const

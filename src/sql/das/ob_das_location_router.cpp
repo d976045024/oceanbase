@@ -11,19 +11,10 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
-#include "sql/das/ob_das_location_router.h"
-#include "sql/das/ob_das_define.h"
-#include "share/ob_ls_id.h"
-#include "observer/ob_server_struct.h"
-#include "share/location_cache/ob_location_service.h"
+#include "ob_das_location_router.h"
 #include "share/schema/ob_part_mgr_util.h"
-#include "share/schema/ob_multi_version_schema_service.h"
-#include "share/schema/ob_schema_utils.h"
-#include "sql/das/ob_das_utils.h"
-#include "sql/ob_sql_context.h"
 #include "storage/tx/wrs/ob_black_list.h"
 #include "storage/tx/ob_trans_service.h"
-#include "lib/rc/context.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -850,9 +841,10 @@ int ObDASLocationRouter::nonblock_get_readable_replica(const uint64_t tenant_id,
       LOG_WARN("check in black list failed", K(ret));
     } else if (!in_black_list) {
       if ((route_policy == COLUMN_STORE_ONLY && tmp_replica_loc.get_replica_type() != REPLICA_TYPE_COLUMNSTORE) ||
-          (route_policy != COLUMN_STORE_ONLY && tmp_replica_loc.get_replica_type() == REPLICA_TYPE_COLUMNSTORE)) {
+          (route_policy != COLUMN_STORE_ONLY && tmp_replica_loc.get_replica_type() == REPLICA_TYPE_COLUMNSTORE) ||
+          (route_policy == FORCE_READONLY_ZONE && tmp_replica_loc.get_replica_type() != REPLICA_TYPE_READONLY)) {
         // skip the tmp_replica_loc
-        LOG_TRACE("skip the replica due to the COLUMN_STORE_ONLY policy.", K(ret), K(tmp_replica_loc));
+        LOG_TRACE("skip the replica due to the replica policy.", K(ret), K(tmp_replica_loc.get_replica_type()), K(tmp_replica_loc));
       } else if (tmp_replica_loc.get_server() == GCTX.self_addr()) {
         //prefer choose the local replica
         local_replica = &tmp_replica_loc;
@@ -872,7 +864,7 @@ int ObDASLocationRouter::nonblock_get_readable_replica(const uint64_t tenant_id,
       LOG_USER_ERROR(OB_NO_REPLICA_VALID);
     } else if (remote_replicas.empty()) {
       ret = OB_NO_READABLE_REPLICA;
-      LOG_WARN("there has no readable replica", K(ret), K(tablet_id), K(ls_loc));
+      LOG_WARN("there has no readable replica", K(ret), K(tablet_id), K(ls_loc), K(route_policy));
     } else {
       //no local copy, randomly select a readable replica
       int64_t select_idx = rand() % remote_replicas.count();

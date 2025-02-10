@@ -13,33 +13,13 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "share/schema/ob_schema_printer.h"
 
-#include "lib/utility/utility.h"
-#include "lib/oblog/ob_log.h"
-#include "lib/oblog/ob_log_module.h"
-#include "lib/allocator/page_arena.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "lib/mysqlclient/ob_mysql_result.h"
-#include "common/object/ob_obj_type.h"
-#include "common/ob_store_format.h"
-#include "share/ob_autoincrement_service.h"
-#include "share/ob_unit_getter.h"
-#include "share/ob_schema_status_proxy.h"
-#include "share/schema/ob_schema_getter_guard.h"
-#include "share/config/ob_server_config.h"
-#include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "sql/printer/ob_raw_expr_printer.h"
-#include "sql/session/ob_sql_session_info.h"
-#include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/parser/ob_parser.h"
-#include "observer/ob_sql_client_decorator.h"
-#include "pl/parser/ob_pl_parser.h"
 #include "pl/ob_pl_resolver.h"
-#include "sql/ob_sql_utils.h"
-#include "share/ob_get_compat_mode.h"
 #include "share/schema/ob_mview_info.h"
 #include "share/ob_fts_index_builder_util.h"
-
+#include "storage/fts/ob_fts_parser_property.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
 
 namespace oceanbase
 {
@@ -598,6 +578,8 @@ int ObSchemaPrinter::print_single_index_definition(const ObTableSchema *index_sc
   if (OB_ISNULL(index_schema)) {
     ret = OB_ERR_UNEXPECTED;
     SHARE_SCHEMA_LOG(WARN, "index is not exist", K(ret));
+  } else if (index_schema->is_in_deleting()) {
+    // the index is in deleting, do not show to user.
   } else {
     ObString index_name;
     ObString new_index_name;
@@ -687,7 +669,7 @@ int ObSchemaPrinter::print_single_index_definition(const ObTableSchema *index_sc
             // skip doc id for fts index.
           } else if (index_schema->is_multivalue_index_aux() && col->is_doc_id_column()) {
             // skip doc id for multivalue index.
-          } else if (index_schema->is_vec_index() && (col->is_vec_vid_column())) {
+          } else if (index_schema->is_vec_index() && (col->is_vec_hnsw_vid_column())) {
             // only need vec_type column to show index key, here skip vec_vid column of delta_buffer_table rowkey column
           } else if (!col->is_shadow_column()) {
             const ObColumnSchemaV2 *tmp_column = NULL;
@@ -1809,11 +1791,24 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
   if (OB_SUCC(ret) && table_schema.is_fts_index()
       && !is_no_key_options(sql_mode) && !table_schema.get_parser_name_str().empty()) {
     storage::ObFTParser parser;
+    storage::ObFTParserJsonProps parser_properties;
     if (OB_FAIL(parser.parse_from_str(table_schema.get_parser_name_str().ptr(), table_schema.get_parser_name_str().length()))) {
       LOG_WARN("fail to parse name from cstring", K(ret), K(table_schema.get_parser_name_str()));
     } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "WITH PARSER %.*s ", parser.get_parser_name().len(),
             parser.get_parser_name().str()))) {
       SHARE_SCHEMA_LOG(WARN, "print parser name failed", K(ret), K(parser));
+    } else if (table_schema.get_parser_property_str().empty()) {
+      // do nothing.
+    } else if (OB_FAIL(parser_properties.init())) {
+      LOG_WARN("fail to init parser properties", K(ret));
+    } else if (OB_FAIL(parser_properties.parse_from_valid_str(
+                   table_schema.get_parser_property_str()))) { // TODO: check valid.
+      LOG_WARN("fail to parse properties", K(ret), K(parser), K(table_schema.get_parser_property_str()));
+    } else if (OB_FAIL(ObFTParserJsonProps::show_parser_properties(parser_properties,
+                                                                   buf,
+                                                                   buf_len,
+                                                                   pos))) {
+      LOG_WARN("fail to show parser properties", K(ret), K(parser_properties));
     }
   }
   if (OB_SUCC(ret) && table_schema.is_vec_index()) {
@@ -1878,7 +1873,19 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
       SHARE_SCHEMA_LOG(WARN, "fail to print use bloom filter", K(ret), K(table_schema));
     }
   }
-
+  if (OB_SUCCESS == ret && !strict_compat_ && !is_index_tbl && !is_no_table_options(sql_mode)
+      && !table_schema.is_external_table()) {
+    uint64_t compat_version = OB_INVALID_VERSION;
+    if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, compat_version))) {
+      SHARE_SCHEMA_LOG(WARN, "get min data_version failed", K(ret), K(tenant_id));
+    } else if (compat_version < DATA_VERSION_4_3_5_1) {
+      // do nothing
+    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "ENABLE_MACRO_BLOCK_BLOOM_FILTER = %s ",
+                                       table_schema.get_enable_macro_block_bloom_filter() ? "TRUE" : "FALSE"))) {
+      SHARE_SCHEMA_LOG(WARN, "fail to print enable_macro_block_bloom_filter",
+                       K(ret), K(table_schema.get_enable_macro_block_bloom_filter()));
+    }
+  }
   if (OB_SUCCESS == ret && !is_index_tbl && table_schema.is_enable_row_movement()
       && !is_no_table_options(sql_mode) && !table_schema.is_external_table()) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, "ENABLE ROW MOVEMENT "))) {
@@ -2376,7 +2383,9 @@ int ObSchemaPrinter::print_table_definition_table_options(
       OB_LOG(WARN, "fail to print collate", K(ret), K(table_schema));
     }
   }
-  if (OB_SUCC(ret) && table_schema.is_fts_index()) {
+  if (OB_SUCC(ret) && (table_schema.is_fts_index_aux() || table_schema.is_fts_doc_word_aux())) {
+    storage::ObFTParser parser;
+    storage::ObFTParserJsonProps parser_properties;
     if (full_text_columns.count() <= 0 || OB_UNLIKELY(virtual_column_id == OB_INVALID_ID)) {
       ret = OB_ERR_UNEXPECTED;
       OB_LOG(WARN, "invalid domain index infos", K(full_text_columns), K(virtual_column_id));
@@ -2385,8 +2394,23 @@ int ObSchemaPrinter::print_table_definition_table_options(
       OB_LOG(WARN, "failed to print table definition full text indexes", K(ret));
     } else if (table_schema.get_parser_name_str().empty()) {
       // do nothing
-    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "WITH PARSER '%s' ", table_schema.get_parser_name()))) {
-      OB_LOG(WARN, "print parser name failed", K(ret));
+    } else if (OB_FAIL(parser.parse_from_str(table_schema.get_parser_name_str().ptr(), table_schema.get_parser_name_str().length()))) {
+      LOG_WARN("fail to parse name from cstring", K(ret), K(table_schema.get_parser_name_str()));
+    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "WITH PARSER %.*s ", parser.get_parser_name().len(),
+            parser.get_parser_name().str()))) {
+      SHARE_SCHEMA_LOG(WARN, "print parser name failed", K(ret), K(parser));
+    } else if (table_schema.get_parser_property_str().empty()) {
+      // do nothing
+    } else if (OB_FAIL(parser_properties.init())) {
+      LOG_WARN("fail to init parser properties", K(ret));
+    } else if (OB_FAIL(parser_properties.parse_from_valid_str(
+                   table_schema.get_parser_property_str()))) {
+      LOG_WARN("fail to parse properties", K(ret), K(parser), K(table_schema.get_parser_property_str()));
+    } else if (OB_FAIL(ObFTParserJsonProps::show_parser_properties(parser_properties,
+                                                                   buf,
+                                                                   buf_len,
+                                                                   pos))) {
+      LOG_WARN("fail to show parser properties", K(ret), K(parser_properties));
     }
   }
   if (OB_SUCC(ret) && !is_index_tbl) {
@@ -2441,6 +2465,18 @@ int ObSchemaPrinter::print_table_definition_table_options(
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, "USE_BLOOM_FILTER = %s ",
                                 table_schema.is_use_bloomfilter() ? "TRUE" : "FALSE"))) {
       OB_LOG(WARN, "fail to print use bloom filter", K(ret), K(table_schema));
+    }
+  }
+  if (OB_SUCC(ret) && !strict_compat_ && !is_index_tbl) {
+    uint64_t compat_version = OB_INVALID_VERSION;
+    if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, compat_version))) {
+      SHARE_SCHEMA_LOG(WARN, "get min data_version failed", K(ret), K(tenant_id));
+    } else if (compat_version < DATA_VERSION_4_3_5_1) {
+      // do nothing
+    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "ENABLE_MACRO_BLOCK_BLOOM_FILTER = %s ",
+                                       table_schema.get_enable_macro_block_bloom_filter() ? "TRUE" : "FALSE"))) {
+      SHARE_SCHEMA_LOG(WARN, "fail to print enable_macro_block_bloom_filter",
+                       K(ret), K(table_schema.get_enable_macro_block_bloom_filter()));
     }
   }
   if (OB_SUCCESS == ret && !strict_compat_ && !is_index_tbl) {
@@ -4240,7 +4276,7 @@ int ObSchemaPrinter::print_udt_body_definition(const uint64_t tenant_id,
                       udt_info->get_type_name().length(),
                       udt_info->get_type_name().ptr()));
     OZ (print_object_definition(udt_body_info, buf, buf_len, pos));
-    OZ (databuff_printf(buf, buf_len, pos, "\nEND;\n"));
+    OZ (databuff_printf(buf, buf_len, pos, "\n"));
     body_exist = true;
   }
   SHARE_SCHEMA_LOG(DEBUG, "print user define type schema", K(ret), K(*udt_info));
@@ -4282,6 +4318,55 @@ int ObSchemaPrinter::print_object_definition(const ObUDTObjectType *object,
                       object_src.length(),
                       object_src.ptr()));
   SHARE_SCHEMA_LOG(DEBUG, "print object schema", K(ret), K(*object));
+  return ret;
+}
+
+int ObSchemaPrinter::print_package_definition(const uint64_t tenant_id,
+                                              uint64_t package_id,
+                                              char* buf,
+                                              const int64_t& buf_len,
+                                              int64_t& pos) const
+{
+  int ret = OB_SUCCESS;
+  const ObPackageInfo *package_info = NULL;
+  const ObDatabaseSchema *database_schema = NULL;
+  ObString actully_package_body;
+  ObArenaAllocator allocator;
+  pl::ObPLParser parser(allocator, ObCharsets4Parser());
+  ObStmtNodeTree *package_stmt = NULL;
+  OZ (schema_guard_.get_package_info(tenant_id, package_id, package_info));
+  if (OB_SUCC(ret) && OB_ISNULL(package_info)) {
+    ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
+    SHARE_SCHEMA_LOG(WARN, "Unknow package", K(ret), K(package_id));
+  }
+  OZ (schema_guard_.get_database_schema(tenant_id, package_info->get_database_id(), database_schema));
+  if (OB_SUCC(ret) && OB_ISNULL(database_schema)) {
+    ret = OB_ERR_BAD_DATABASE;
+    SHARE_SCHEMA_LOG(WARN, "Unknow database", K(ret), K(package_info->get_database_id()));
+  }
+  CK (lib::is_oracle_mode());
+  OZ (databuff_printf(buf, buf_len, pos, "CREATE OR REPLACE%s PACKAGE%s \"%.*s\".\"%.*s\"\n",
+                      package_info->is_noneditionable() ? " NONEDITIONABLE" : "",
+                      package_info->is_package() ? "" : " BODY",
+                      database_schema->get_database_name_str().length(),
+                      database_schema->get_database_name_str().ptr(),
+                      package_info->get_package_name().length(),
+                      package_info->get_package_name().ptr()));
+  CK (!package_info->get_source().empty());
+  OZ (parser.parse_package(package_info->get_source(), package_stmt, ObDataTypeCastParams(), NULL, false));
+  CK (OB_NOT_NULL(package_stmt));
+  CK (T_STMT_LIST == package_stmt->type_);
+  CK (1 == package_stmt->num_child_);
+  CK (OB_NOT_NULL(package_stmt->children_[0]));
+  OX (package_stmt = package_stmt->children_[0]);
+  CK (package_info->is_package() ? T_PACKAGE_BLOCK == package_stmt->type_
+                                 : T_PACKAGE_BODY_BLOCK == package_stmt->type_);
+  OX (actully_package_body = ObString(package_stmt->str_len_, package_stmt->str_value_));
+  CK (!actully_package_body.empty());
+  OZ (databuff_printf(buf, buf_len, pos, "%.*s",
+                      actully_package_body.length(),
+                      actully_package_body.ptr()));
+  SHARE_SCHEMA_LOG(DEBUG, "print package schema", K(ret), K(*package_info));
   return ret;
 }
 
@@ -5002,16 +5087,17 @@ int ObSchemaPrinter::print_trigger_definition(const ObTriggerInfo &trigger_info,
   int ret = OB_SUCCESS;
   const ObDatabaseSchema *database_schema = NULL;
   if (lib::is_oracle_mode()) {
-    if (!trigger_info.is_system_type()) {
-      OZ (schema_guard_.get_database_schema(trigger_info.get_tenant_id(),
-          trigger_info.get_database_id(), database_schema));
-      CK (OB_NOT_NULL(database_schema));
-      OZ (BUF_PRINTF("CREATE OR REPLACE TRIGGER \"%.*s\".\"%.*s\"",
-                    database_schema->get_database_name_str().length(),
-                    database_schema->get_database_name_str().ptr(),
-                    trigger_info.get_trigger_name().length(),
-                    trigger_info.get_trigger_name().ptr()),
-          trigger_info.get_trigger_name());
+    OZ (schema_guard_.get_database_schema(trigger_info.get_tenant_id(),
+        trigger_info.get_database_id(), database_schema));
+    CK (OB_NOT_NULL(database_schema));
+    OZ (BUF_PRINTF("CREATE OR REPLACE TRIGGER \"%.*s\".\"%.*s\"",
+                  database_schema->get_database_name_str().length(),
+                  database_schema->get_database_name_str().ptr(),
+                  trigger_info.get_trigger_name().length(),
+                  trigger_info.get_trigger_name().ptr()),
+        trigger_info.get_trigger_name());
+    if (OB_FAIL(ret)) {
+    } else if (!trigger_info.is_system_type()) {
       if (trigger_info.is_simple_dml_type()) {
         OZ (print_simple_trigger_definition(trigger_info, buf, buf_len, pos, get_ddl),
             trigger_info.get_trigger_name());
@@ -5020,9 +5106,8 @@ int ObSchemaPrinter::print_trigger_definition(const ObTriggerInfo &trigger_info,
             trigger_info.get_trigger_name());
       }
     } else {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support print trigger type", K(trigger_info.get_trigger_type()), K(ret));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "not support print this trigger type");
+      OZ (print_system_trigger_definition(trigger_info, buf, buf_len, pos, get_ddl),
+            trigger_info.get_trigger_name());
     }
   } else {
     OZ (BUF_PRINTF("CREATE DEFINER = %.*s %.*s",
@@ -5154,6 +5239,27 @@ int ObSchemaPrinter::print_compound_instead_trigger_definition(const ObTriggerIn
       trigger_info.get_trigger_body());
   CK (OB_NOT_NULL(parse_result.result_tree_) && OB_NOT_NULL(parse_result.result_tree_->children_[0]));
   OZ (BUF_PRINTF(" %.*s", (int)(parse_result.result_tree_->children_[0]->str_len_),
+                 parse_result.result_tree_->children_[0]->str_value_));
+  if (OB_SUCC(ret) && get_ddl) {
+    OZ (print_trigger_status(trigger_info, buf, buf_len, pos));
+  }
+  return ret;
+}
+
+int ObSchemaPrinter::print_system_trigger_definition(const ObTriggerInfo &trigger_info,
+                                                     char *buf, int64_t buf_len, int64_t &pos,
+                                                     bool get_ddl) const
+{
+  int ret = OB_SUCCESS;
+  ObArenaAllocator alloc;
+  sql::ObParser parser(alloc, trigger_info.get_sql_mode());
+  ParseResult parse_result;
+  OV (trigger_info.is_system_type());
+  OZ (parser.parse(trigger_info.get_trigger_body(), parse_result, TRIGGER_MODE,
+                  false, false, true),
+      trigger_info.get_trigger_body());
+  CK (OB_NOT_NULL(parse_result.result_tree_) && OB_NOT_NULL(parse_result.result_tree_->children_[0]));
+  OZ (BUF_PRINTF("\n%.*s", (int)(parse_result.result_tree_->children_[0]->str_len_),
                  parse_result.result_tree_->children_[0]->str_value_));
   if (OB_SUCC(ret) && get_ddl) {
     OZ (print_trigger_status(trigger_info, buf, buf_len, pos));

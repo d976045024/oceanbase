@@ -374,7 +374,11 @@
 # 523: __all_pkg_type_attr
 # 524: __all_pkg_coll_type
 # 525: __wr_sql_plan
+# 527: __all_kv_redis_table
 # 528: __all_ncomp_dll_v2
+# 531: __ft_dict_ik_utf8
+# 532: __ft_stopword_ik_utf8
+# 533: __ft_quantifier_ik_utf8
 # 10001: __tenant_virtual_all_table
 # 10002: __tenant_virtual_table_column
 # 10003: __tenant_virtual_table_index
@@ -475,7 +479,6 @@
 # 12009: user
 # 12010: db
 # 12013: __all_virtual_lock_wait_stat
-# 12030: proc
 # 12031: __tenant_virtual_collation
 # 12032: __tenant_virtual_charset
 # 12033: __all_virtual_tenant_memstore_allocator_info
@@ -1191,11 +1194,14 @@
 # 12500: __all_virtual_kv_client_info
 # 12501: __all_virtual_wr_sql_plan
 # 12501: __wr_sql_plan  # BASE_TABLE_NAME
+# 12503: __all_virtual_kv_redis_table
+# 12503: __all_kv_redis_table  # BASE_TABLE_NAME
 # 12504: __all_virtual_function_io_stat
 # 12505: __all_virtual_temp_file
 # 12506: __all_virtual_ncomp_dll_v2
 # 12506: __all_ncomp_dll_v2  # BASE_TABLE_NAME
 # 12514: __all_virtual_ddl_diagnose_info
+# 12515: __all_virtual_plugin_info
 # 15009: ALL_VIRTUAL_SQL_AUDIT
 # 15009: __all_virtual_sql_audit  # BASE_TABLE_NAME
 # 15010: ALL_VIRTUAL_PLAN_STAT
@@ -2382,10 +2388,15 @@
 # 21613: CDB_WR_SQL_PLAN
 # 21616: DBA_OB_SPM_EVO_RESULT
 # 21617: CDB_OB_SPM_EVO_RESULT
+# 21618: DBA_OB_KV_REDIS_TABLE
+# 21619: CDB_OB_KV_REDIS_TABLE
 # 21620: GV$OB_FUNCTION_IO_STAT
 # 21621: V$OB_FUNCTION_IO_STAT
 # 21622: DBA_OB_TEMP_FILES
 # 21623: CDB_OB_TEMP_FILES
+# 21628: proc
+# 21635: GV$OB_PLUGINS
+# 21636: V$OB_PLUGINS
 # 25001: DBA_SYNONYMS
 # 25002: DBA_OBJECTS
 # 25003: ALL_OBJECTS

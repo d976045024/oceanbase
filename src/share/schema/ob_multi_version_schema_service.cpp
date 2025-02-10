@@ -11,28 +11,9 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
-#include "share/ob_define.h"
-#include "lib/oblog/ob_log.h"
-#include "lib/profile/ob_trace_id.h"
-#include "lib/time/ob_time_utility.h"
-#include "lib/container/ob_vector.h"
-#include "lib/mysqlclient/ob_mysql_transaction.h"
-#include "lib/utility/ob_print_utils.h"
-#include "share/schema/ob_schema_getter_guard.h"
-#include "share/schema/ob_multi_version_schema_service.h"
-#include "share/schema/ob_schema_utils.h"
-#include "share/schema/ob_schema_mgr.h"
-#include "share/rc/ob_context.h"
-#include "share/ob_schema_status_proxy.h"
-#include "share/ob_global_stat_proxy.h"
 // for materialized view
-#include "sql/parser/ob_parser.h"
-#include "sql/resolver/dml/ob_dml_resolver.h"
-#include "sql/resolver/dml/ob_view_table_resolver.h"
-#include "sql/session/ob_sql_session_info.h"
+#include "ob_multi_version_schema_service.h"
 #include "observer/ob_server.h"
-#include "share/schema/ob_outline_mgr.h"
-#include "share/schema/ob_udt_mgr.h"
 
 namespace oceanbase
 {
@@ -1719,48 +1700,50 @@ int ObMultiVersionSchemaService::init_sys_tenant_user_schema()
   int ret = OB_SUCCESS;
 
   ObTenantSchema sys_tenant;
-  ObSysVariableSchema sys_variable;
-  ObUserInfo sys_user;
+  SMART_VAR(ObSysVariableSchema, sys_variable) {
+    HEAP_VAR(ObUserInfo, sys_user) {
 
-  sys_tenant.set_tenant_id(OB_SYS_TENANT_ID);
-  sys_tenant.set_schema_version(OB_CORE_SCHEMA_VERSION);
+      sys_tenant.set_tenant_id(OB_SYS_TENANT_ID);
+      sys_tenant.set_schema_version(OB_CORE_SCHEMA_VERSION);
 
-  sys_user.set_tenant_id(OB_SYS_TENANT_ID);
-  sys_user.set_user_id(OB_SYS_USER_ID);
-  sys_user.set_priv_set(OB_PRIV_ALL | OB_PRIV_GRANT | OB_PRIV_BOOTSTRAP);
-  sys_user.set_schema_version(OB_CORE_SCHEMA_VERSION);
+      sys_user.set_tenant_id(OB_SYS_TENANT_ID);
+      sys_user.set_user_id(OB_SYS_USER_ID);
+      sys_user.set_priv_set(OB_PRIV_ALL | OB_PRIV_GRANT | OB_PRIV_BOOTSTRAP);
+      sys_user.set_schema_version(OB_CORE_SCHEMA_VERSION);
 
-  sys_variable.set_tenant_id(OB_SYS_TENANT_ID);
-  sys_variable.set_schema_version(OB_CORE_SCHEMA_VERSION);
-  sys_variable.set_name_case_mode(OB_ORIGIN_AND_INSENSITIVE);
+      sys_variable.set_tenant_id(OB_SYS_TENANT_ID);
+      sys_variable.set_schema_version(OB_CORE_SCHEMA_VERSION);
+      sys_variable.set_name_case_mode(OB_ORIGIN_AND_INSENSITIVE);
 
-  if (OB_FAIL(sys_variable.load_default_system_variable(true))) {
-    LOG_WARN("load sys tenant default system variable failed", K(ret));
-  } else if (OB_FAIL(sys_tenant.set_tenant_name(OB_SYS_TENANT_NAME))) {
-    LOG_WARN("Set sys tenant name error", K(ret));
-  } else if (OB_FAIL(sys_user.set_user_name(OB_SYS_USER_NAME))){
-    LOG_WARN("Set user name error", K(ret));
-  } else if (OB_FAIL(sys_user.set_host(OB_SYS_HOST_NAME))){
-    LOG_WARN("Set host name error", K(ret));
-  } else if (OB_FAIL(schema_cache_.put_schema(TENANT_SCHEMA,
-                                              OB_SYS_TENANT_ID,
-                                              sys_tenant.get_tenant_id(),
-                                              sys_tenant.get_schema_version(),
-                                              sys_tenant))) {
-    LOG_WARN("put schema failed", K(ret));
-  } else if (OB_FAIL(schema_cache_.put_schema(USER_SCHEMA,
-                                              OB_SYS_TENANT_ID,
-                                              sys_user.get_user_id(),
-                                              sys_user.get_schema_version(),
-                                              sys_user))) {
-    LOG_WARN("put schema failed", K(ret));
-  } else if (OB_FAIL(schema_cache_.put_schema(SYS_VARIABLE_SCHEMA,
-                                              OB_SYS_TENANT_ID,
-                                              sys_variable.get_tenant_id(),
-                                              sys_variable.get_schema_version(),
-                                              sys_variable))) {
-    LOG_WARN("put schema failed", K(ret));
-  } else {}
+      if (OB_FAIL(sys_variable.load_default_system_variable(true))) {
+        LOG_WARN("load sys tenant default system variable failed", K(ret));
+      } else if (OB_FAIL(sys_tenant.set_tenant_name(OB_SYS_TENANT_NAME))) {
+        LOG_WARN("Set sys tenant name error", K(ret));
+      } else if (OB_FAIL(sys_user.set_user_name(OB_SYS_USER_NAME))){
+        LOG_WARN("Set user name error", K(ret));
+      } else if (OB_FAIL(sys_user.set_host(OB_SYS_HOST_NAME))){
+        LOG_WARN("Set host name error", K(ret));
+      } else if (OB_FAIL(schema_cache_.put_schema(TENANT_SCHEMA,
+                                                  OB_SYS_TENANT_ID,
+                                                  sys_tenant.get_tenant_id(),
+                                                  sys_tenant.get_schema_version(),
+                                                  sys_tenant))) {
+        LOG_WARN("put schema failed", K(ret));
+      } else if (OB_FAIL(schema_cache_.put_schema(USER_SCHEMA,
+                                                  OB_SYS_TENANT_ID,
+                                                  sys_user.get_user_id(),
+                                                  sys_user.get_schema_version(),
+                                                  sys_user))) {
+        LOG_WARN("put schema failed", K(ret));
+      } else if (OB_FAIL(schema_cache_.put_schema(SYS_VARIABLE_SCHEMA,
+                                                  OB_SYS_TENANT_ID,
+                                                  sys_variable.get_tenant_id(),
+                                                  sys_variable.get_schema_version(),
+                                                  sys_variable))) {
+        LOG_WARN("put schema failed", K(ret));
+      } else {}
+    }
+  }
 
   return ret;
 }

@@ -11,56 +11,25 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
-#include <algorithm>
+#include "ob_logical_operator.h"
 #include "sql/engine/ob_operator_factory.h"
-#include "sql/optimizer/ob_logical_operator.h"
-#include "lib/hash_func/murmur_hash.h"
-#include "sql/resolver/expr/ob_raw_expr_replacer.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/code_generator/ob_static_engine_cg.h"
-#include "share/schema/ob_schema_getter_guard.h"
-#include "share/schema/ob_schema_struct.h"
 #include "ob_log_exchange.h"
 #include "ob_log_group_by.h"
 #include "ob_log_distinct.h"
-#include "ob_log_insert.h"
-#include "ob_log_join.h"
-#include "ob_log_set.h"
 #include "ob_log_sort.h"
 #include "ob_log_subplan_scan.h"
-#include "ob_log_table_scan.h"
-#include "ob_log_limit.h"
 #include "ob_log_window_function.h"
 #include "ob_log_granule_iterator.h"
-#include "ob_log_update.h"
 #include "ob_log_merge.h"
-#include "ob_opt_est_cost.h"
-#include "ob_optimizer_util.h"
-#include "ob_raw_expr_add_to_context.h"
-#include "ob_raw_expr_check_dep.h"
-#include "ob_log_count.h"
 #include "ob_log_monitoring_dump.h"
 #include "ob_log_subplan_filter.h"
-#include "ob_log_topk.h"
-#include "ob_log_material.h"
 #include "ob_log_join_filter.h"
 #include "ob_log_temp_table_access.h"
-#include "ob_log_temp_table_insert.h"
-#include "ob_log_function_table.h"
-#include "ob_log_json_table.h"
 #include "sql/rewrite/ob_transform_utils.h"
-#include "common/ob_smart_call.h"
-#include "sql/printer/ob_raw_expr_printer.h"
-#include "ob_log_err_log.h"
-#include "ob_log_temp_table_transformation.h"
-#include "ob_log_expr_values.h"
-#include "sql/optimizer/ob_join_order.h"
-#include "sql/optimizer/ob_opt_selectivity.h"
 #include "sql/optimizer/ob_log_merge.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
-#include "sql/engine/expr/ob_expr_join_filter.h"
-#include "sql/engine/px/p2p_datahub/ob_runtime_filter_query_range.h"
-#include "sql/optimizer/ob_opt_est_parameter_normal.h"
 
 
 using namespace oceanbase::sql;
@@ -2935,7 +2904,7 @@ int ObLogicalOperator::get_tbl_loc_cons_for_pdml_index(LocationConstraint &loc_c
     LOG_WARN("failed to get location type", K(ret));
   } else {
     loc_cons.phy_loc_type_ = location_type;
-    loc_cons.key_.table_id_ = dml_log_op->get_table_id();
+    loc_cons.key_.table_id_ = dml_log_op->get_loc_table_id();
     loc_cons.key_.ref_table_id_ = dml_log_op->get_index_tid();
     loc_cons.table_partition_info_ = dml_log_op->get_table_partition_info();
     if (sharding->get_part_cnt() > 1 && sharding->is_distributed()) {
@@ -4387,7 +4356,7 @@ int ObLogicalOperator::allocate_granule_nodes_above(AllocGIContext &ctx)
         gi_op->add_flag(GI_PARTITION_WISE);
       }
       if (LOG_TABLE_SCAN == get_type()) {
-        if (static_cast<ObLogTableScan*>(this)->is_text_retrieval_scan() || static_cast<ObLogTableScan*>(this)->is_vec_idx_scan()) {
+        if (static_cast<ObLogTableScan*>(this)->is_text_retrieval_scan() || static_cast<ObLogTableScan*>(this)->is_post_vec_idx_scan()) {
           gi_op->add_flag(GI_FORCE_PARTITION_GRANULE);
         }
         if (static_cast<ObLogTableScan *>(this)->get_join_filter_info().is_inited_) {
@@ -5671,6 +5640,7 @@ int ObLogicalOperator::allocate_normal_join_filter(const ObIArray<JoinFilterInfo
       && GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_3_0) {
     can_join_filter_material = true;
   }
+  int64_t last_valid_join_filter_info_idx = -1;
   if (OB_SUCC(ret)) {
     for (int i = 0; i < infos.count() && OB_SUCC(ret); ++i) {
       bool right_has_exchange = false;
@@ -5785,6 +5755,7 @@ int ObLogicalOperator::allocate_normal_join_filter(const ObIArray<JoinFilterInfo
 
         if (OB_SUCC(ret) && can_join_filter_material) {
           valied_join_filter_count++;
+          last_valid_join_filter_info_idx = i;
           join_filter_create->get_jf_material_control_info().enable_material_ = true;
           if (join_filter_create->get_join_exprs().count()
               != static_cast<ObLogJoin *>(this)->get_equal_join_conditions().count()) {
@@ -5847,6 +5818,12 @@ int ObLogicalOperator::allocate_normal_join_filter(const ObIArray<JoinFilterInfo
           hash_id++;
         }
       }
+    }
+
+    // add full hash join key left exprs to join filter
+    const JoinFilterInfo &info = infos.at(last_valid_join_filter_info_idx);
+    if (OB_FAIL(join_filter_create->set_all_join_key_left_exprs(info.all_join_key_left_exprs_))) {
+      LOG_WARN("failed to set_all_join_key_left_exprs");
     }
   }
   return ret;

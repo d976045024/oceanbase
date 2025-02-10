@@ -12,8 +12,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "observer/table_load/ob_table_load_index_table_projector.h"
-#include "lib/oblog/ob_log_module.h"
-#include "share/rc/ob_tenant_base.h"
 #include "storage/ob_i_store.h"
 #include "storage/direct_load/ob_direct_load_vector_utils.h"
 
@@ -108,9 +106,9 @@ int ObTableLoadIndexTableProjector::build_row_projector(
   } else {
     common::ObArray<share::schema::ObColDesc> main_column_descs;
     common::ObArray<share::schema::ObColDesc> index_column_descs;
-    if (OB_FAIL(data_table_schema->get_column_ids(main_column_descs, false))) {
+    if (OB_FAIL(data_table_schema->get_column_ids(main_column_descs, true/*no_virtual*/))) {
       LOG_WARN("fail to get column ids", KR(ret));
-    } else if (OB_FAIL(index_table_schema->get_column_ids(index_column_descs, false))) {
+    } else if (OB_FAIL(index_table_schema->get_column_ids(index_column_descs, true/*no_virtual*/))) {
       LOG_WARN("fail to get column ids", KR(ret));
     } else {
       FOREACH_X(iter, index_column_descs, OB_SUCC(ret)) {

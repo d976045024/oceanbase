@@ -12,50 +12,14 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "ob_root_service.h"
 #include "observer/ob_server.h"
-#include "rootserver/ob_root_service.h"
 
-#include "share/ob_define.h"
-#include "lib/time/ob_time_utility.h"
-#include "lib/string/ob_sql_string.h"
-#include "lib/utility/ob_preload.h"
-#include "lib/worker.h"
-#include "lib/oblog/ob_log_module.h"
-#include "lib/container/ob_se_array_iterator.h"
-#include "lib/container/ob_array_iterator.h"
-#include "lib/file/file_directory_utils.h"
-#include "lib/encrypt/ob_encrypted_helper.h"
 
-#include "share/ob_srv_rpc_proxy.h"
-#include "share/ob_thread_mgr.h"
-#include "common/ob_timeout_ctx.h"
-#include "common/object/ob_object.h"
-#include "share/ob_cluster_version.h"
 
-#include "share/ob_define.h"
-#include "share/ob_version.h"
-#include "share/schema/ob_schema_service.h"
-#include "share/schema/ob_multi_version_schema_service.h"
-#include "share/schema/ob_schema_utils.h"
-#include "share/schema/ob_schema_mgr.h"
-#include "share/ob_lease_struct.h"
-#include "share/ob_common_rpc_proxy.h"
-#include "share/config/ob_config_helper.h"
-#include "share/config/ob_config_manager.h"
-#include "share/inner_table/ob_inner_table_schema.h"
-#include "share/schema/ob_part_mgr_util.h"
-#include "share/ob_web_service_root_addr.h"
-#include "share/ob_inner_config_root_addr.h"
 #include "share/ob_global_stat_proxy.h"
-#include "share/ob_autoincrement_service.h"
-#include "share/ob_time_zone_info_manager.h"
-#include "share/ob_server_status.h"
 #include "share/ob_index_builder_util.h"
-#include "share/ob_fts_index_builder_util.h"
-#include "observer/ob_server_struct.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
 #include "observer/ob_server_event_history_table_operator.h"
-#include "share/ob_upgrade_utils.h"
 #include "share/deadlock/ob_deadlock_inner_table_service.h"
 #ifdef OB_BUILD_TDE_SECURITY
 #include "share/ob_master_key_getter.h"
@@ -63,15 +27,11 @@
 #ifdef OB_BUILD_ARBITRATION
 #include "share/arbitration_service/ob_arbitration_service_utils.h" // ObArbitrationServiceUtils
 #endif
-#include "share/ob_max_id_fetcher.h" // ObMaxIdFetcher
 #include "share/backup/ob_backup_config.h"
-#include "share/backup/ob_backup_helper.h"
-#include "share/scheduler/ob_sys_task_stat.h"
 #include "share/scheduler/ob_partition_auto_split_helper.h"
 
-#include "sql/executor/ob_executor_rpc_proxy.h"
 #include "sql/engine/cmd/ob_user_cmd_executor.h"
-#include "sql/engine/px/ob_px_util.h"
+#include "src/sql/engine/px/ob_dfo.h"
 #include "observer/dbms_job/ob_dbms_job_master.h"
 
 #include "rootserver/ob_bootstrap.h"
@@ -79,44 +39,19 @@
 #include "rootserver/ob_schema2ddl_sql.h"
 #include "rootserver/ob_index_builder.h"
 #include "rootserver/ob_mlog_builder.h"
-#include "rootserver/ob_update_rs_list_task.h"
-#include "rootserver/ob_resource_weight_parser.h"
-#include "rootserver/ob_rs_job_table_operator.h"
-#include "rootserver/restore/ob_restore_util.h"
-#include "rootserver/ob_root_utils.h"
-#include "rootserver/ob_vertical_partition_builder.h"
 #include "rootserver/ob_ddl_sql_generator.h"
-#include "rootserver/ddl_task/ob_ddl_task.h"
-#include "rootserver/ddl_task/ob_constraint_task.h"
 #include "share/ob_ddl_sim_point.h"
-#include "storage/ob_file_system_router.h"
-#include "storage/tx/ob_ts_mgr.h"
-#include "lib/stat/ob_diagnose_info.h"
 #include "rootserver/ob_cluster_event.h"        // CLUSTER_EVENT_ADD_CONTROL
 #include "observer/omt/ob_tenant_timezone_mgr.h"
-#include "share/backup/ob_backup_io_adapter.h"
-#include "share/ob_global_context_operator.h"
 
-#include "share/ls/ob_ls_table_operator.h"  // for ObLSTableOperator
-#include "share/ls/ob_ls_status_operator.h"//ls_status_operator
-#include "share/ob_max_id_fetcher.h" //ObMaxIdFetcher
-#include "observer/ob_service.h"
-#include "storage/ob_file_system_router.h"
-#include "storage/ddl/ob_ddl_heart_beat_task.h"
 #include "rootserver/freeze/ob_major_freeze_helper.h"
-#include "share/restore/ob_physical_restore_table_operator.h"//ObPhysicalRestoreTableOperator
 #include "share/ob_cluster_event_history_table_operator.h"//CLUSTER_EVENT_INSTANCE
-#include "share/scn.h"
 #include "share/restore/ob_recover_table_util.h"
 #include "rootserver/backup/ob_backup_proxy.h" //ObBackupServiceProxy
-#include "logservice/palf_handle_guard.h"
-#include "logservice/ob_log_service.h"
 #include "rootserver/restore/ob_restore_service.h"
 #include "rootserver/restore/ob_recover_table_initiator.h"
 #include "rootserver/ob_heartbeat_service.h"
 #include "share/tenant_snapshot/ob_tenant_snapshot_table_operator.h"
-#include "share/restore/ob_tenant_clone_table_operator.h"
-#include "rootserver/tenant_snapshot/ob_tenant_snapshot_util.h"
 #include "rootserver/restore/ob_tenant_clone_util.h"
 
 #include "parallel_ddl/ob_create_table_helper.h" // ObCreateTableHelper
@@ -685,7 +620,8 @@ ObRootService::ObRootService()
     disaster_recovery_task_executor_(),
     disaster_recovery_task_mgr_(),
     global_ctx_task_(*this),
-    alter_log_external_table_task_(*this)
+    alter_log_external_table_task_(*this),
+    root_rebuild_tablet_()
 {
 }
 
@@ -938,7 +874,11 @@ int ObRootService::init(ObServerConfig &config,
                                                       &sql_proxy_,
                                                       schema_service_))) {
     FLOG_WARN("init disaster recovery task mgr failed", KR(ret));
+  } else if (OB_FAIL(root_rebuild_tablet_.init(rpc_proxy_, unit_manager_))) {
+    // init root rebuild tablet
+    FLOG_WARN("init root_rebuild_tablet_ failed", KR(ret));
   }
+
   if (OB_SUCC(ret)) {
     inited_ = true;
     FLOG_INFO("[ROOTSERVICE_NOTICE] init rootservice success", KR(ret), K_(inited));
@@ -5153,6 +5093,11 @@ int ObRootService::rebuild_vec_index(const obrpc::ObRebuildIndexArg &arg, obrpc:
   return ret;
 }
 
+int ObRootService::drop_lob(const ObDropLobArg &arg)
+{
+  return ddl_service_.drop_lob(arg);
+}
+
 int ObRootService::rebuild_index(const obrpc::ObRebuildIndexArg &arg, obrpc::ObAlterTableRes &res)
 {
   int ret = OB_SUCCESS;
@@ -7047,6 +6992,8 @@ int ObRootService::create_routine_common(const ObCreateRoutineArg &arg,
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ddl_service_.get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
       LOG_WARN("get schema guard in inner table failed", K(ret));
+    } else if (OB_FAIL(check_parallel_ddl_conflict(schema_guard, arg))) {
+      LOG_WARN("check parallel ddl conflict failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id, database_name, db_schema))) {
       LOG_WARN("get database schema failed", K(ret));
     } else if (NULL == db_schema) {
@@ -7187,6 +7134,8 @@ int ObRootService::alter_routine_common(const ObCreateRoutineArg &arg,
     } else if (OB_FAIL(ddl_service_.get_tenant_schema_guard_with_version_in_inner_table(
                                   tenant_id, schema_guard))) {
       LOG_WARN("get schema guard in inner table failed", K(ret), K(tenant_id));
+    } else if (OB_FAIL(check_parallel_ddl_conflict(schema_guard, arg))) {
+      LOG_WARN("check parallel ddl conflict failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_routine_info(
                tenant_id, arg.routine_info_.get_routine_id(), routine_info))) {
       LOG_WARN("failed to get routine info", K(ret), K(tenant_id));
@@ -7258,6 +7207,8 @@ int ObRootService::drop_routine(const ObDropRoutineArg &arg)
       LOG_WARN("no database selected", K(ret), K(db_name));
     } else if (OB_FAIL(ddl_service_.get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
       LOG_WARN("get schema guard in inner table failed", K(ret));
+    } else if (OB_FAIL(check_parallel_ddl_conflict(schema_guard, arg))) {
+      LOG_WARN("check parallel ddl conflict failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id, db_name, db_schema))) {
       LOG_WARN("get database schema failed", K(ret));
     } else if (NULL == db_schema) {
@@ -7528,6 +7479,8 @@ int ObRootService::drop_udt(const ObDropUDTArg &arg)
       LOG_WARN("no database selected", K(ret), K(db_name));
     } else if (OB_FAIL(ddl_service_.get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
       LOG_WARN("get schema guard in inner table failed", K(ret));
+    } else if (OB_FAIL(check_parallel_ddl_conflict(schema_guard, arg))) {
+      LOG_WARN("check parallel ddl conflict failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id, db_name, db_schema))) {
       LOG_WARN("get database schema failed", K(ret));
     } else if (NULL == db_schema) {
@@ -7851,6 +7804,8 @@ int ObRootService::create_package_common(const obrpc::ObCreatePackageArg &arg,
       LOG_WARN("fail to check is oracle mode", K(ret));
     } else if (OB_FAIL(ddl_service_.get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
       LOG_WARN("get schema guard in inner table failed", K(ret));
+    } else if (OB_FAIL(check_parallel_ddl_conflict(schema_guard, arg))) {
+      LOG_WARN("check parallel ddl conflict failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id, database_name, db_schema))) {
       LOG_WARN("get database schema failed", K(ret));
     } else if (NULL == db_schema) {
@@ -7989,6 +7944,8 @@ int ObRootService::alter_package_common(const obrpc::ObAlterPackageArg &arg,
     const ObDatabaseSchema *db_schema = NULL;
     if (OB_FAIL(ddl_service_.get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
       LOG_WARN("get schema guard in inner table failed", K(ret));
+    } else if (OB_FAIL(check_parallel_ddl_conflict(schema_guard, arg))) {
+      LOG_WARN("check parallel ddl conflict failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id, db_name, db_schema))) {
       LOG_WARN("get database schema failed", K(ret));
     } else if (NULL == db_schema) {
@@ -8097,6 +8054,8 @@ int ObRootService::drop_package(const obrpc::ObDropPackageArg &arg)
     const ObDatabaseSchema *db_schema = NULL;
     if (OB_FAIL(ddl_service_.get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
       LOG_WARN("get schema guard in inner table failed", K(ret));
+    } else if (OB_FAIL(check_parallel_ddl_conflict(schema_guard, arg))) {
+      LOG_WARN("check parallel ddl conflict failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id, db_name, db_schema))) {
       LOG_WARN("get database schema failed", K(ret));
     } else if (NULL == db_schema) {
@@ -12438,6 +12397,24 @@ int ObRootService::check_transfer_task_tablet_count_threshold_(obrpc::ObAdminSet
       LOG_WARN("config invalid", KR(ret), K(value), K(item), K(tenant_id));
     }
   }
+  return ret;
+}
+
+int ObRootService::root_rebuild_tablet(const obrpc::ObRebuildTabletArg &arg)
+{
+  int ret = OB_SUCCESS;
+  LOG_INFO("rebuild tablet request", K(arg));
+
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (!arg.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arg", K(arg), K(ret));
+  } else if (OB_FAIL(root_rebuild_tablet_.try_rebuild_tablet(arg))) {
+    LOG_WARN("minor freeze failed", K(ret), K(arg));
+  }
+  ROOTSERVICE_EVENT_ADD("root_service", "rebuild tablet", K(ret), K(arg));
   return ret;
 }
 

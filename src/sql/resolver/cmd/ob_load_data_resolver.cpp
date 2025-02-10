@@ -12,22 +12,9 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/cmd/ob_load_data_resolver.h"
-#include "sql/resolver/ob_resolver_define.h"
-#include "sql/resolver/cmd/ob_load_data_stmt.h"
-#include "sql/resolver/ob_resolver_utils.h"
-#include "share/schema/ob_table_schema.h"
-#include "sql/resolver/expr/ob_raw_expr_resolver_impl.h"
-#include "sql/resolver/dml/ob_default_value_utils.h"
-#include "sql/resolver/dml/ob_select_resolver.h"
-#include "common/sql_mode/ob_sql_mode.h"
-#include "sql/printer/ob_raw_expr_printer.h"
-#include "sql/resolver/ob_resolver.h"
-#include "sql/resolver/dml/ob_delete_resolver.h"
-#include "lib/json/ob_json.h"
+#include "src/sql/resolver/dml/ob_del_upd_resolver.h"
 #include "lib/json/ob_json_print_utils.h"
 #include "share/backup/ob_backup_io_adapter.h"
-#include "share/backup/ob_backup_struct.h"
-#include "lib/restore/ob_storage_info.h"
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
 #include <glob.h>
 #include "share/schema/ob_part_mgr_util.h"
@@ -191,8 +178,6 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "load data to the view is");
     } else if (OB_FAIL(check_trigger_constraint(tschema))) {
       LOG_WARN("check trigger constraint failed", K(ret), KPC(tschema));
-    } else if (OB_FAIL(check_collection_sql_type(tschema))) {
-      LOG_WARN("check collection sql type column failed", K(ret), KPC(tschema));
     } else {
       load_args.table_id_ = tschema->get_table_id();
       load_args.table_name_ = table_name;

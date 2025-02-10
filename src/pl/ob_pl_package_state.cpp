@@ -12,18 +12,8 @@
 
 #define USING_LOG_PREFIX PL
 
-#include "pl/ob_pl_package_state.h"
+#include "ob_pl_package_state.h"
 #include "pl/ob_pl_package.h"
-#include "pl/ob_pl_package_manager.h"
-#include "lib/oblog/ob_log_module.h"
-#include "lib/utility/ob_print_utils.h"
-#include "lib/utility/serialization.h"
-#include "lib/string/ob_string.h"
-#include "observer/mysql/obmp_utils.h"
-#include "rpc/obmysql/ob_mysql_packet.h"
-#include "sql/ob_sql_utils.h"
-#include "sql/engine/ob_exec_context.h"
-#include "pl/ob_pl_resolver.h"
 namespace oceanbase
 {
 using namespace common;
@@ -223,12 +213,7 @@ int ObPLPackageState::set_package_var_val(const int64_t var_idx,
                && types_.at(var_idx) != PL_CURSOR_TYPE
                && types_.at(var_idx) != PL_REF_CURSOR_TYPE) {
       CK (vars_.at(var_idx).get_ext() != 0);
-      if (OB_FAIL(ret)) {
-      } else if (PL_RECORD_TYPE == types_.at(var_idx)) {
-        OZ (ObUserDefinedType::reset_record(vars_.at(var_idx), NULL));
-      } else {
-        OZ (ObUserDefinedType::destruct_obj(vars_.at(var_idx), NULL, true));
-      }
+      OZ (ObUserDefinedType::reset_composite(vars_.at(var_idx), NULL));
     } else {
       vars_.at(var_idx) = value;
     }

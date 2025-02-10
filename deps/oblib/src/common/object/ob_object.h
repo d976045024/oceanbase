@@ -46,6 +46,7 @@ namespace common
 {
 
 struct ObCompareCtx;
+class ObSqlCollectionInfo;
 enum ObCmpNullPos
 {
   NULL_LAST = 1,
@@ -1259,6 +1260,49 @@ public:
   uint64_t seq_id_;
 };
 
+class ObCenterId final
+{
+public:
+  ObCenterId();
+  ObCenterId(const uint64_t tablet_id, const uint64_t center_id);
+  ~ObCenterId() = default;
+
+  void reset();
+  bool is_valid() const;
+
+  bool operator ==(const ObCenterId &other) const;
+  bool operator !=(const ObCenterId &other) const;
+  bool operator <(const ObCenterId &other) const;
+  bool operator >(const ObCenterId &other) const;
+
+  TO_STRING_KV(K_(tablet_id), K_(center_id));
+public:
+  uint64_t tablet_id_;
+  uint64_t center_id_;
+};
+
+class ObPqCenterId final
+{
+public:
+  ObPqCenterId();
+  ObPqCenterId(const uint64_t tablet_id, const uint32_t m_id, const uint32_t center_id);
+  ~ObPqCenterId() = default;
+
+  void reset();
+  bool is_valid() const;
+
+  bool operator ==(const ObPqCenterId &other) const;
+  bool operator !=(const ObPqCenterId &other) const;
+  bool operator <(const ObPqCenterId &other) const;
+  bool operator >(const ObPqCenterId &other) const;
+
+  TO_STRING_KV(K_(tablet_id), K_(center_id), K_(m_id));
+public:
+  uint64_t tablet_id_;
+  uint32_t m_id_;
+  uint32_t center_id_;
+};
+
 struct ObObjPrintParams
 {
   ObObjPrintParams (const ObTimeZoneInfo *tz_info, ObCollationType cs_type):
@@ -1267,7 +1311,8 @@ struct ObObjPrintParams
     accuracy_(),
     print_flags_(0),
     exec_ctx_(NULL),
-    ob_obj_type_(ObNullType)
+    ob_obj_type_(ObNullType),
+    coll_meta_(NULL)
   {}
   ObObjPrintParams (const ObTimeZoneInfo *tz_info):
     tz_info_(tz_info),
@@ -1275,7 +1320,8 @@ struct ObObjPrintParams
     accuracy_(),
     print_flags_(0),
     exec_ctx_(NULL),
-    ob_obj_type_(ObNullType)
+    ob_obj_type_(ObNullType),
+    coll_meta_(NULL)
   {}
   ObObjPrintParams ():
     tz_info_(NULL),
@@ -1283,7 +1329,8 @@ struct ObObjPrintParams
     accuracy_(),
     print_flags_(0),
     exec_ctx_(NULL),
-    ob_obj_type_(ObNullType)
+    ob_obj_type_(ObNullType),
+    coll_meta_(NULL)
   {}
   TO_STRING_KV(K_(tz_info), K_(cs_type),K_(print_flags), K_(ob_obj_type));
   const ObTimeZoneInfo *tz_info_;
@@ -1318,6 +1365,7 @@ struct ObObjPrintParams
   */
   sql::ObExecContext *exec_ctx_;
   ObObjType ob_obj_type_;
+  common::ObSqlCollectionInfo *coll_meta_;
 };
 
 // sizeof(ObObjValue)=8

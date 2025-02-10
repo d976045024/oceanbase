@@ -2734,6 +2734,9 @@ typedef enum ObItemType
   T_ORGANIZATION = 4793,
   T_ORGANIZATION_INDEX = 4794,
   T_ORGANIZATION_HEAP = 4795,
+  T_PARSE_HEADER = 4796,
+  T_SP_OBJ_PERSISTABLE = 4797,
+  T_FLASHBACK_STANDBY_LOG = 4798,
   T_FUN_SYS_HELLO = 2100,
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
@@ -2902,6 +2905,13 @@ extern const char *get_type_name(int type);
 #define IS_KEEP_AGGR_FUN(op) ((op) >= T_FUN_KEEP_MAX && (op) <= T_FUN_KEEP_STDDEV)
 
 #define IS_JSON_COMPATIBLE_OP(op) (IS_COMMON_COMPARISON_OP(op) || (op) == T_OP_ROW || (op) == T_OP_LIKE)
+#define IS_TYPE_DEMOTION_FUN(op) ((T_FUN_SYS_DEMOTE_CAST == (op) || \
+                                   T_FUN_SYS_RANGE_PLACEMENT == (op)))
+
+#define IS_ARRAY_MAP_OP(op) ((op) == T_FUNC_SYS_ARRAY_MAP || \
+                             (op) == T_FUNC_SYS_ARRAY_FIRST || \
+                             (op) == T_FUNC_SYS_ARRAY_FILTER || \
+                             (op) == T_FUNC_SYS_ARRAY_SORTBY)
 /**
  * @notice: 目前只支持IS_BASIC_CMP_OP这个宏里定义的op type，如果有在这之外的需求，请扩展这个接口的实现
  * */

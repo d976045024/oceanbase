@@ -12,15 +12,8 @@
 
 #define USING_LOG_PREFIX SHARE
 
-#include "share/ob_rpc_struct.h"
-#include "share/inner_table/ob_inner_table_schema.h"
-#include "share/backup/ob_backup_struct.h"
-#include "lib/utility/ob_serialization_helper.h"
-#include "lib/utility/ob_print_utils.h"
-#include "common/ob_store_format.h"
-#include "observer/ob_server_struct.h"
+#include "ob_rpc_struct.h"
 #include "storage/tx/ob_trans_service.h"
-#include "share/ls/ob_ls_status_operator.h"
 
 namespace oceanbase
 {
@@ -3557,6 +3550,7 @@ DEF_TO_STRING(ObAlterIndexArg)
 }
 
 OB_SERIALIZE_MEMBER((ObAlterIndexArg, ObIndexArg), index_visibility_);
+OB_SERIALIZE_MEMBER((ObDropLobArg, ObDDLArg), tenant_id_, session_id_, data_table_id_, aux_lob_meta_table_id_);
 
 DEF_TO_STRING(ObDropIndexArg) {
   int64_t pos = 0;
@@ -7126,6 +7120,32 @@ DEF_TO_STRING(ObForceSetServerListArg)
 
 OB_SERIALIZE_MEMBER(ObForceSetServerListArg, server_list_, replica_num_);
 
+OB_SERIALIZE_MEMBER(ObForceSetServerListResult::LSFailedInfo, ls_id_, failed_ret_code_, failed_reason_);
+
+OB_SERIALIZE_MEMBER(ObForceSetServerListResult::ResultInfo, tenant_id_, successful_ls_, failed_ls_info_);
+
+int ObForceSetServerListResult::ResultInfo::add_ls_info(const share::ObLSID ls_id, const int failed_ret)
+{
+  int ret = OB_SUCCESS;
+  if (!ls_id.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(ls_id), K(failed_ret));
+  } else if (OB_SUCCESS == failed_ret) {
+    if (OB_FAIL(successful_ls_.push_back(ls_id))) {
+      LOG_WARN("push_back failed", K(ret), K(ls_id));
+    }
+  } else {
+    const common::ObString failed_reason = ob_error_name(failed_ret);
+    LSFailedInfo failed_info(ls_id, failed_ret, failed_reason);
+    if (OB_FAIL(failed_ls_info_.push_back(failed_info))) {
+      LOG_WARN("insert_and_get failed for failed_ls_info_", K(ret), K(ls_id), K(failed_ret));
+    }
+  }
+  return ret;
+}
+
+OB_SERIALIZE_MEMBER(ObForceSetServerListResult, ret_, result_list_);
+
 bool ObForceCreateSysTableArg::is_valid() const
 {
   return OB_INVALID_TENANT_ID != tenant_id_
@@ -10418,16 +10438,17 @@ DEF_TO_STRING(ObCreateTabletInfo)
 
 OB_SERIALIZE_MEMBER(ObCreateTabletInfo, tablet_ids_, data_tablet_id_, table_schema_index_, compat_mode_, is_create_bind_hidden_tablets_, create_commit_versions_, has_cs_replica_);
 
-int ObCreateTabletExtraInfo::init(
-    const uint64_t tenant_data_version,
-    const bool need_create_empty_major,
-    const bool micro_index_clustered,
-    const ObTabletID &split_src_tablet_id)
+int ObCreateTabletExtraInfo::init(const uint64_t tenant_data_version,
+                                  const bool need_create_empty_major,
+                                  const bool micro_index_clustered,
+                                  const ObTabletID &split_src_tablet_id)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(tenant_data_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(tenant_data_version), K(need_create_empty_major), K(micro_index_clustered), K(split_src_tablet_id));
+    LOG_WARN("invalid arg",
+             K(ret), K(tenant_data_version), K(need_create_empty_major),
+             K(micro_index_clustered), K(split_src_tablet_id));
   } else {
     tenant_data_version_ = tenant_data_version;
     need_create_empty_major_ = need_create_empty_major;
@@ -13488,5 +13509,34 @@ int ObNotifyStartArchiveArg::assign(const ObNotifyStartArchiveArg &other)
   }
   return ret;
 }
+
+OB_SERIALIZE_MEMBER(ObRebuildTabletArg, tenant_id_, ls_id_, tablet_id_array_, dest_, src_);
+
+bool ObRebuildTabletArg::is_valid() const
+{
+  return tenant_id_ > 0
+      && ls_id_.is_valid()
+      && !tablet_id_array_.empty()
+      && dest_.is_valid()
+      && src_.is_valid();
+}
+
+int ObRebuildTabletArg::assign(const ObRebuildTabletArg &arg)
+{
+  int ret = OB_SUCCESS;
+  if (!arg.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(arg));
+  } else if (OB_FAIL(tablet_id_array_.assign(arg.tablet_id_array_))) {
+    LOG_WARN("failed to assign tablet id array", K(ret), K(arg));
+  } else {
+    tenant_id_ = arg.tenant_id_;
+    ls_id_ = arg.ls_id_;
+    dest_ = arg.dest_;
+    src_ = arg.src_;
+  }
+  return ret;
+}
+
 }//end namespace obrpc
 }//end namespace oceanbase

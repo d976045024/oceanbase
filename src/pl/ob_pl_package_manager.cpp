@@ -12,23 +12,10 @@
 
 #define USING_LOG_PREFIX PL
 
-#include "pl/ob_pl_package_manager.h"
-#include "pl/ob_pl.h"
+#include "ob_pl_package_manager.h"
 #include "pl/ob_pl_package.h"
-#include "pl/ob_pl_resolver.h"
 #include "pl/ob_pl_compile.h"
-#include "pl/ob_pl_stmt.h"
-#include "pl/ob_pl_package_state.h"
-#include "sql/session/ob_sql_session_info.h"
-#include "sql/engine/ob_exec_context.h"
-#include "sql/plan_cache/ob_cache_object_factory.h"
-#include "sql/plan_cache/ob_plan_cache.h"
-#include "sql/ob_sql_utils.h"
-#include "observer/ob_server_struct.h"
-#include "observer/ob_req_time_service.h"
-#include "lib/file/file_directory_utils.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
-#include "sql/session/ob_session_val_map.h"
 
 namespace oceanbase
 {
@@ -483,6 +470,8 @@ static const ObSysPackageFile oracle_syspack_file_list[] = {
   {"sdo_geom", "sdo_geom.sql", "sdo_geom_body.sql"},
   {"dbms_external_table", "dbms_external_table.sql", "dbms_external_table_body.sql"},
   {"dbms_profiler", "dbms_profiler.sql", "dbms_profiler_body.sql"},
+  {"utl_tcp", "utl_tcp.sql", "utl_tcp_body.sql"},
+  {"utl_smtp", "utl_smtp.sql", "utl_smtp_body.sql"},
 #endif
 };
 static const ObSysPackageFile mysql_syspack_file_list[] = {
@@ -1267,6 +1256,7 @@ int ObPLPackageManager::load_package_body(const ObPLResolveCtx &resolve_ctx,
       source = package_spec_info.get_source();
     }
     OZ (resolve_ctx.schema_guard_.get_database_schema(tenant_id, db_id, db_schema));
+    CK (OB_NOT_NULL(db_schema));
     OZ (package_spec_ast.init(db_schema->get_database_name_str(),
                               package_spec_info.get_package_name(),
                               PL_PACKAGE_SPEC,

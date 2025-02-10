@@ -10,15 +10,10 @@
  * See the Mulan PubL v2 for more details.
  */
 
+#define USING_LOG_PREFIX STORAGE
+
 #include "ob_storage_schema.h"
-#include "blocksstable/ob_block_sstable_struct.h"
-#include "storage/compaction/ob_sstable_merge_history.h"
-#include "share/ob_encryption_util.h"
-#include "share/schema/ob_column_schema.h"
-#include "share/schema/ob_schema_struct.h"
-#include "storage/ob_storage_struct.h"
 #include "storage/column_store/ob_column_store_replica_util.h"
-#include "share/ob_cluster_version.h"
 
 namespace oceanbase
 {
@@ -330,6 +325,9 @@ int ObStorageColumnGroupSchema::copy_from(ObIArray<ObColDesc> &column_ids,
   } else if (OB_UNLIKELY(cg_schema.get_column_id_count() > column_ids.count())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected error for cg schema", K(ret), K(column_ids), K(cg_schema));
+  } else if (share::schema::SINGLE_COLUMN_GROUP == cg_schema.get_column_group_type() && cg_schema.get_column_id_count() > 1) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "get unexpected single cg schema", K(ret), K(cg_schema));
   } else {
     const bool is_normal_cg_schema = cg_schema.is_normal_column_group();
     version_ = COLUMN_GRUOP_SCHEMA_VERSION;
@@ -555,6 +553,7 @@ int ObStorageSchema::init(
   } else {
     is_column_table_schema_ = is_column_table_schema;
     is_cs_replica_compat_ = is_cg_array_generated_in_cs_replica();
+    enable_macro_block_bloom_filter_ = input_schema.get_enable_macro_block_bloom_filter();
     is_inited_ = true;
   }
 
@@ -625,7 +624,7 @@ int ObStorageSchema::init(
       STORAGE_LOG(WARN, "failed to copy skip idx attr array", K(ret), K(old_schema));
     } else if (!column_info_simplified_ && OB_FAIL(deep_copy_column_array(allocator, old_schema, old_schema.column_array_.count()))) {
       STORAGE_LOG(WARN, "failed to deep copy column array", K(ret), K(old_schema));
-    } else if (generate_cs_replica_cg_array) {
+    } else if (!column_info_simplified_ && generate_cs_replica_cg_array) {
       // skip deep copy if column group schema array need generated from column array
     } else if (NULL != column_group_schema && OB_FAIL(deep_copy_column_group_array(allocator, *column_group_schema))) {
       STORAGE_LOG(WARN, "failed to deep copy column array from column group schema", K(ret), K(old_schema), KPC(column_group_schema));
@@ -636,7 +635,7 @@ int ObStorageSchema::init(
     if (OB_FAIL(ret)) {
     } else if (nullptr != update_param && OB_FAIL(refactor_storage_schema(allocator, old_schema, *update_param))) {
       STORAGE_LOG(WARN, "failed to rebuild column array", K(ret), K(old_schema), KPC(update_param));
-    } else if (generate_cs_replica_cg_array && OB_FAIL(ObStorageSchema::generate_cs_replica_cg_array())) {
+    } else if (!column_info_simplified_ && generate_cs_replica_cg_array && OB_FAIL(ObStorageSchema::generate_cs_replica_cg_array())) {
       STORAGE_LOG(WARN, "failed to generate_cs_replica_cg_array", K(ret));
     } else if (OB_UNLIKELY(!is_valid())) {
       ret = OB_ERR_UNEXPECTED;
@@ -644,6 +643,7 @@ int ObStorageSchema::init(
     } else {
       is_column_table_schema_ = old_schema.is_column_table_schema_;
       is_cs_replica_compat_ = is_cg_array_generated_in_cs_replica();
+      enable_macro_block_bloom_filter_ = old_schema.get_enable_macro_block_bloom_filter();
       is_inited_ = true;
     }
   }

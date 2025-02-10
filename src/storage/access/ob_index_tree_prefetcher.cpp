@@ -11,14 +11,8 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "lib/statistic_event/ob_stat_event.h"
-#include "lib/stat/ob_diagnose_info.h"
-#include "share/rc/ob_tenant_base.h"
 #include "ob_index_tree_prefetcher.h"
-#include "ob_sstable_index_filter.h"
 #include "storage/access/ob_aggregate_base.h"
-#include "storage/access/ob_rows_info.h"
-#include "storage/blocksstable/ob_storage_cache_suite.h"
 
 namespace oceanbase
 {
@@ -333,7 +327,10 @@ int ObIndexTreePrefetcher::check_bloom_filter(
   if (!index_info.is_valid() || !index_info.is_macro_node()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(index_info), K(read_handle));
-  } else if (!access_ctx_->query_flag_.is_index_back() && access_ctx_->enable_bf_cache()) {
+  } else if (!access_ctx_->query_flag_.is_index_back() && access_ctx_->enable_bf_cache()) { // TODO(baichangmin): here, enable_bf_cache.
+    if (index_info.has_macro_block_bloom_filter()) {
+      read_handle.has_macro_block_bf_ = true;
+    }
     bool is_contain = true;
     const MacroBlockId macro_id = GCTX.is_shared_storage_mode() && index_info.has_valid_shared_macro_id() ?
       index_info.get_shared_data_macro_id() : index_info.get_macro_id();

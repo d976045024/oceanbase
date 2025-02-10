@@ -11,20 +11,10 @@
  */
 
 #include <gtest/gtest.h>
-#include <thread>
 #define private public
 #define protected public
 #include "libobtable.h"
-#include "lib/utility/ob_test_util.h"
-#include "lib/allocator/page_arena.h"
-#include "lib/lds/ob_lds_constructor.hpp"
-#include "share/table/ob_table_rpc_struct.h"
-#include "common/row/ob_row.h"
-#include "observer/table/ob_htable_utils.h"
 #include "observer/table/ob_htable_filter_operator.h"
-#include "observer/table/ob_table_service.h"
-#include "storage/ls/ob_ls_tablet_service.h"
-#include <thread>
 #undef private
 #undef protected
 using namespace oceanbase::common;
@@ -227,37 +217,6 @@ TEST_F(TestBatchExecute, entity_factory)
             entity_factory.get_total_mem(), entity_factory.get_used_mem());
   }
 }
-
-TEST_F(TestBatchExecute, serialize_batch_result)
-{
-  ObTableBatchOperationResult result;
-  ObTableEntity result_entity;
-  ObTableOperationResult single_op_result;
-  single_op_result.set_entity(result_entity);
-  single_op_result.set_errno(1234);
-  single_op_result.set_type(ObTableOperationType::INSERT_OR_UPDATE);
-  single_op_result.set_affected_rows(4321);
-  ASSERT_EQ(OB_SUCCESS, result.push_back(single_op_result));
-  int64_t expected_len = result.get_serialize_size();
-  char buf[1024];
-  int64_t pos = 0;
-  ASSERT_EQ(OB_SUCCESS, result.serialize(buf, 1024, pos));
-  ASSERT_EQ(expected_len, pos);
-
-  ObTableBatchOperationResult result2;
-  ObTableEntityFactory<ObTableEntity> entity_factory;
-  result2.set_entity_factory(&entity_factory);
-  int64_t data_len = pos;
-  //fprintf(stderr, "yzfdebug datalen=%ld expectedlen=%ld\n", data_len, expected_len);
-  pos = 0;
-  ASSERT_EQ(OB_SUCCESS, result2.deserialize(buf, data_len, pos));
-  ASSERT_EQ(1, result2.count());
-  ASSERT_EQ(1234, result2.at(0).get_errno());
-  ASSERT_EQ(4321, result2.at(0).get_affected_rows());
-  ASSERT_EQ(ObTableOperationType::INSERT_OR_UPDATE, result2.at(0).type());
-}
-
-
 
 TEST_F(TestBatchExecute, all_single_operation)
 {
@@ -842,7 +801,7 @@ TEST_F(TestBatchExecute, column_type_check)
     value.set_collation_type(CS_TYPE_BINARY);
     ASSERT_EQ(OB_SUCCESS, entity->set_property(ObString::make_string("cblob"), value));
 
-    int64_t now = ObTimeUtility::current_time();
+    int64_t now = ObTimeUtility::fast_current_time();
     ObTimeConverter::round_datetime(0, now);
     value.set_timestamp(now);
     ASSERT_EQ(OB_SUCCESS, entity->set_property(ObString::make_string("ctimestamp"), value));

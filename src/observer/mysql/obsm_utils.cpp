@@ -12,12 +12,6 @@
 
 #include "obsm_utils.h"
 
-#include "lib/time/ob_time_utility.h"
-#include "lib/charset/ob_dtoa.h"
-#include "common/ob_field.h"
-#include "share/schema/ob_schema_getter_guard.h"
-#include "share/schema/ob_udt_info.h"
-#include "pl/ob_pl_user_type.h"
 #include "pl/ob_pl_stmt.h"
 #ifdef OB_BUILD_ORACLE_PL
 #include "pl/sys_package/ob_sdo_geometry.h"
@@ -260,7 +254,7 @@ int ObSMUtils::cell_str(
           } else if (OB_ISNULL(udt_info)) {
             ret = OB_ERR_UNEXPECTED;
             OB_LOG(WARN, "udt info is null", K(ret));
-          } else if (OB_FAIL(udt_info->transform_to_pl_type(allocator, user_type))) {
+          } else if (OB_FAIL(udt_info->transform_to_pl_type(allocator, *schema_guard, user_type))) {
             OB_LOG(WARN, "faild to transform to pl type", K(ret));
           } else if (OB_ISNULL(user_type)) {
             ret = OB_ERR_UNEXPECTED;
@@ -321,9 +315,9 @@ int ObSMUtils::cell_str(
                 if (OB_FAIL(schema_guard->get_udt_info(tenant_id, udt_id, udt_info))) {
                   OB_LOG(WARN,"failed to get udt info", K(ret), K(tenant_id), K(udt_id));
                 } else if (OB_ISNULL(udt_info)) {
-                  ret = OB_ERR_UNEXPECTED;
+                  ret = OB_ERR_EXPRESSION_WRONG_TYPE;
                   OB_LOG(WARN,"udt info is null", K(ret), K(udt_id));
-                }  else if (OB_FAIL(udt_info->transform_to_pl_type(local_allocator, elem_user_type))) {
+                }  else if (OB_FAIL(udt_info->transform_to_pl_type(local_allocator, *schema_guard, elem_user_type))) {
                   OB_LOG(WARN,"failed to transform to pl type", K(ret), KPC(udt_info));
                 } else if (OB_ISNULL(elem_user_type)) {
                   ret = OB_ERR_UNEXPECTED;
@@ -376,7 +370,7 @@ int ObSMUtils::cell_str(
             }
           }
           if (OB_FAIL(ret)) {
-          } else if (OB_FAIL(udt_info->transform_to_pl_type(allocator, user_type))) {
+          } else if (OB_FAIL(udt_info->transform_to_pl_type(allocator, *schema_guard, user_type))) {
             OB_LOG(WARN, "faild to transform to pl type", K(ret));
           } else if (OB_ISNULL(user_type)) {
             ret = OB_ERR_UNEXPECTED;
@@ -670,7 +664,7 @@ int ObSMUtils::extend_cell_str(char *buf, const int64_t len,
   } else if (NULL == udt_info) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "faild to get udt info.", K(ret));
-  } else if (OB_FAIL(udt_info->transform_to_pl_type(allocator, user_type))) {
+  } else if (OB_FAIL(udt_info->transform_to_pl_type(allocator, *schema_guard, user_type))) {
     OB_LOG(WARN, "faild to transform to pl type", K(ret));
   } else if (NULL == user_type) {
     ret = OB_ERR_UNEXPECTED;

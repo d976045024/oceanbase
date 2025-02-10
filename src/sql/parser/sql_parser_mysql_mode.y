@@ -212,7 +212,7 @@ DYNAMIC_SAMPLING
 NEG_SIGN
 
 %token /*can not be relation name*/
-_BINARY _UTF8 _UTF8MB4 _UTF8MB3 _GBK _UTF16 _GB18030 _GB18030_2022 _LATIN1 _ASCII _TIS620 _UTF16LE _SJIS _BIG5 _DEC8 _HKSCS _HKSCS31 CNNOP
+_BINARY _UTF8 _UTF8MB4 _UTF8MB3 _GBK _UTF16 _GB18030 _GB18030_2022 _LATIN1 _GB2312 _ASCII _TIS620 _UJIS _EUCKR _EUCJPMS _CP932 _UTF16LE _SJIS _BIG5 _DEC8 _CP850 _HP8 _MACROMAN _SWE7 _HKSCS _HKSCS31 CNNOP
 SELECT_HINT_BEGIN UPDATE_HINT_BEGIN DELETE_HINT_BEGIN INSERT_HINT_BEGIN REPLACE_HINT_BEGIN HINT_HINT_BEGIN HINT_END
 LOAD_DATA_HINT_BEGIN CREATE_HINT_BEGIN ALTER_HINT_BEGIN
 END_P SET_VAR DELIMITER
@@ -269,7 +269,7 @@ END_P SET_VAR DELIMITER
         ACCESS ACCESS_INFO ACCESSID ACCESSKEY ACCESSTYPE ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE ALGORITHM ALL_META ALL_USER ALWAYS ALLOW ANALYSE ANY
         APPROX_COUNT_DISTINCT APPROX_COUNT_DISTINCT_SYNOPSIS APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE
         ARBITRATION ARRAY ASCII ASIS AT ATTRIBUTE AUTHORS AUTO AUTOEXTEND_SIZE AUTO_INCREMENT AUTO_INCREMENT_MODE AUTO_INCREMENT_CACHE_SIZE
-        AVG AVG_ROW_LENGTH ACTIVATE AVAILABILITY ARCHIVELOG ASYNCHRONOUS AUDIT ADMIN AUTO_REFRESH APPROX APPROXIMATE ARRAY_AGG ARRAY_MAP
+        AVG AVG_ROW_LENGTH ACTIVATE AVAILABILITY ARCHIVELOG ASYNCHRONOUS AUDIT ADMIN AUTO_REFRESH APPROX APPROXIMATE ARRAY_AGG ARRAY_FILTER ARRAY_FIRST ARRAY_MAP ARRAY_SORTBY
 
         BACKUP BACKUP_COPIES BALANCE BANDWIDTH BASE BASELINE BASELINE_ID BASIC BEGI BINDING SHARDING BINLOG BIT BIT_AND
         BIT_OR BIT_XOR BLOCK BLOCK_INDEX BLOCK_SIZE BLOOM_FILTER BOOL BOOLEAN BOOTSTRAP BTREE BYTE
@@ -284,11 +284,11 @@ END_P SET_VAR DELIMITER
         CTXCAT CTX_ID CUBE CURDATE CURRENT STACKED CURTIME CURSOR_NAME CUME_DIST CYCLE CALC_PARTITION_ID CONNECT
 
         DAG DATA DATAFILE DATA_DISK_SIZE DATA_SOURCE DATA_TABLE_ID DATE DATE_ADD DATE_SUB DATETIME DAY DEALLOCATE DECRYPT DECRYPTION
-        DEFAULT_AUTH DEFAULT_LOB_INROW_THRESHOLD DEFINER DELAY DELAY_KEY_WRITE DEPTH DES_KEY_FILE DENSE_RANK DESCRIPTION DESTINATION DIAGNOSTICS
+        DEFAULT_AUTH DEFAULT_LOB_INROW_THRESHOLD DEFINER DELAY DELAY_KEY_WRITE DEPTH DES_KEY_FILE DENSE_RANK DESCRIPTION DESTINATION DIAGNOSTICS DICT_TABLE
         DIRECTORY DISABLE DISALLOW DISCARD DISK DISKGROUP DO DOT DUMP DUMPFILE DUPLICATE DUPLICATE_SCOPE DUPLICATE_READ_CONSISTENCY DYNAMIC
         DATABASE_ID DEFAULT_TABLEGROUP DISCONNECT DEMAND
 
-        EFFECTIVE EMPTY ENABLE ENABLE_ARBITRATION_SERVICE ENABLE_EXTENDED_ROWID ENCRYPT ENCRYPTED ENCRYPTION END ENDPOINT ENDS ENFORCED ENGINE_ ENGINES ENUM ENTITY ERROR_CODE ERROR_P ERRORS ESTIMATE
+        EFFECTIVE EMPTY ENABLE ENABLE_ARBITRATION_SERVICE ENABLE_EXTENDED_ROWID ENABLE_MACRO_BLOCK_BLOOM_FILTER ENCRYPT ENCRYPTED ENCRYPTION END ENDPOINT ENDS ENFORCED ENGINE_ ENGINES ENUM ENTITY ERROR_CODE ERROR_P ERRORS ESTIMATE
         ESCAPE EVENT EVENTS EVERY EXCHANGE EXCLUDING EXECUTE EXPANSION EXPIRE EXPIRE_INFO EXPORT OUTLINE EXTENDED
         EXTENDED_NOADDR EXTENT_SIZE EXTRACT EXCEPT EXPIRED ENCODING EMPTY_FIELD_AS_NULL EUCLIDEAN EXTERNAL EXTERNAL_STORAGE_DEST
 
@@ -319,13 +319,13 @@ END_P SET_VAR DELIMITER
         MASTER_HOST MASTER_LOG_FILE MASTER_LOG_POS MASTER_PASSWORD MASTER_PORT MASTER_RETRY_COUNT
         MASTER_SERVER_ID MASTER_SSL MASTER_SSL_CA MASTER_SSL_CAPATH MASTER_SSL_CERT MASTER_SSL_CIPHER
         MASTER_SSL_CRL MASTER_SSL_CRLPATH MASTER_SSL_KEY MASTER_USER MAX MAX_CONNECTIONS_PER_HOUR MAX_CPU
-        MAX_FILE_SIZE LOG_DISK_SIZE MAX_NET_BANDWIDTH MAX_IOPS MEMORY_SIZE MAX_QUERIES_PER_HOUR MAX_ROWS MAX_SIZE
+        MAX_FILE_SIZE MAX_TOKEN_SIZE LOG_DISK_SIZE MAX_NET_BANDWIDTH MAX_IOPS MEMORY_SIZE MAX_QUERIES_PER_HOUR MAX_ROWS MAX_SIZE
         MAX_UPDATES_PER_HOUR MAX_USER_CONNECTIONS MEDIUM MEMORY MEMTABLE MESSAGE_TEXT META MICROSECOND
-        MIGRATE MIN MIN_CPU MIN_IOPS MIN_MAX MINOR MIN_ROWS MINUS MINUTE MISMATCH MODE MODIFY MONTH MOVE
+        MIGRATE MIN MIN_CPU MIN_IOPS MIN_MAX MIN_TOKEN_SIZE MINOR MIN_ROWS MINUS MINUTE MISMATCH MODE MODIFY MODULE MONTH MOVE
         MULTILINESTRING MULTIPOINT MULTIPOLYGON MULTIVALUE MUTEX MYSQL_ERRNO MIGRATION MAX_USED_PART_ID MAXIMIZE
         MATERIALIZED MEMBER MEMSTORE_PERCENT MINVALUE MY_NAME
 
-        NAME NAMES NAMESPACE NATIONAL NCHAR NDB NDBCLUSTER NESTED NEW NEXT NO NOAUDIT NODEGROUP NONE NORMAL NOW NOWAIT NEVER
+        NAME NAMES NAMESPACE NATIONAL NCHAR NDB NDBCLUSTER NESTED NEW NEXT NO NOAUDIT NODEGROUP NONE NORMAL NOW NOWAIT NEVER NGRAM_TOKEN_SIZE
         NOMINVALUE NOMAXVALUE NOORDER NOCYCLE NOCACHE NO_WAIT NULLS NUMBER NVARCHAR NTILE NTH_VALUE NOARCHIVELOG NETWORK NET_BANDWIDTH_WEIGHT NOPARALLEL
         NULL_IF_EXETERNAL
 
@@ -333,13 +333,13 @@ END_P SET_VAR DELIMITER
         OBCONFIG_URL OJ
         OBJECT_ID
 
-        PACK_KEYS PAGE PARALLEL PARAMETERS PARSER PARTIAL PARTITION_ID PARTITIONING PARTITIONS PASSWORD PATH PAUSE PAXOS_REPLICA_NUM PERCENTAGE
+        PACK_KEYS PAGE PARALLEL PARAMETERS PARSER PARSER_PROPERTIES PARTIAL PARTITION_ID PARTITIONING PARTITIONS PASSWORD PATH PAUSE PAXOS_REPLICA_NUM PERCENTAGE
         PERCENT_RANK PHASE PLAN PHYSICAL PLANREGRESS PLUGIN PLUGIN_DIR PLUGINS POINT POLYGON PERFORMANCE
         PROTECTION PROJECT_NAME PRIORITY PL POLICY POOL PORT POSITION PREPARE PRESERVE PRETTY PRETTY_COLOR PREV PRIMARY_ZONE PRIVILEGES PROCESS
         PROCESSLIST PROFILE PROFILES PROPERTIES PROXY PRECEDING PCTFREE P_ENTITY P_CHUNK
         PUBLIC PROGRESSIVE_MERGE_NUM PREVIEW PS PLUS PATTERN PARTITION_TYPE
 
-        QUARTER QUERY QUERY_RESPONSE_TIME QUEUE_TIME QUICK QUOTA_NAME
+        QUANTIFIER_TABLE QUARTER QUERY QUERY_RESPONSE_TIME QUEUE_TIME QUICK QUOTA_NAME
 
         RB_AND_AGG RB_BUILD_AGG RB_ITERATE RB_OR_AGG REBUILD RECOVER RECOVERY_WINDOW RECYCLE REDO_BUFFER_SIZE REDOFILE REDUNDANCY REDUNDANT REFRESH REGION RELAY RELAYLOG
         RELAY_LOG_FILE RELAY_LOG_POS RELAY_THREAD RELOAD REMAP REMOVE REORGANIZE REPAIR REPEATABLE REPLICA
@@ -355,7 +355,7 @@ END_P SET_VAR DELIMITER
         SOURCE SPFILE SPLIT SQL_AFTER_GTIDS SQL_AFTER_MTS_GAPS SQL_BEFORE_GTIDS SQL_BUFFER_RESULT
         SQL_CACHE SQL_NO_CACHE SQL_ID SCHEMA_ID SQL_THREAD SQL_TSI_DAY SQL_TSI_HOUR SQL_TSI_MINUTE SQL_TSI_MONTH
         SQL_TSI_QUARTER SQL_TSI_SECOND SQL_TSI_WEEK SQL_TSI_YEAR SRID STANDBY _ST_ASMVT STAT START STARTS STATS_AUTO_RECALC
-        STATS_PERSISTENT STATS_SAMPLE_PAGES STATUS STATEMENTS STATISTICS STD STDDEV STDDEV_POP STDDEV_SAMP STRONG STSTOKEN
+        STATS_PERSISTENT STATS_SAMPLE_PAGES STATUS STATEMENTS STATISTICS STD STDDEV STDDEV_POP STDDEV_SAMP STOPWORD_TABLE STRONG STSTOKEN
         SYNCHRONIZATION SYNCHRONOUS STOP STORAGE STORAGE_FORMAT_VERSION STORE STORING STRING STRIPE_SIZE
         SUBCLASS_ORIGIN SUBDATE SUBJECT SUBPARTITION SUBPARTITIONS SUBSTR SUBSTRING SUCCESSFUL SUM
         SUPER SUSPEND SWAPS SWITCH SWITCHES SWITCHOVER SYSTEM SYSTEM_USER SYSDATE SESSION_ALIAS
@@ -365,7 +365,7 @@ END_P SET_VAR DELIMITER
         TEMPLATE TEMPORARY TEMPTABLE TENANT TEXT THAN TIME TIMESTAMP TIMESTAMPADD TIMESTAMPDIFF TP_NO
         TP_NAME TRACE TRADITIONAL TRANSACTION TRIGGERS TRIM TRUNCATE TYPE TYPES TASK TABLET_SIZE
         TABLEGROUP_ID TENANT_ID THROTTLE TIME_ZONE_INFO TOP_K_FRE_HIST TIMES TRIM_SPACE TTL
-        TRANSFER TUNNEL_ENDPOINT TENANT_STS_CREDENTIAL
+        TRANSFER TUNNEL_ENDPOINT TENANT_STS_CREDENTIAL TABLETS
 
         UNCOMMITTED UNCONDITIONAL UNDEFINED UNDO_BUFFER_SIZE UNDOFILE UNNEST UNICODE UNINSTALL UNIT UNIT_GROUP UNIT_NUM UNLOCKED UNTIL
         UNUSUAL UPGRADE USE_BLOOM_FILTER UNKNOWN USE_FRM USER USER_RESOURCES UNBOUNDED UP UNLIMITED USER_SPECIFIED
@@ -500,7 +500,7 @@ END_P SET_VAR DELIMITER
 %type <node> namespace_expr opt_namespace
 %type <node> server_action server_list opt_server_list
 %type <node> zone_action upgrade_action
-%type <node> opt_index_name opt_key_or_index opt_index_options opt_fulltext_index_options opt_primary  opt_all
+%type <node> opt_index_name opt_key_or_index opt_index_options opt_fulltext_index_options fulltext_parser_properties_list fulltext_parser_properties opt_primary  opt_all
 %type <node> charset_key database_key charset_name charset_name_or_default collation_name compression_key databases_or_schemas trans_param_name trans_param_value
 %type <node> charset_introducer complex_string_literal literal number_literal now_or_signed_literal signed_literal
 %type <node> create_tablegroup_stmt drop_tablegroup_stmt alter_tablegroup_stmt default_tablegroup
@@ -564,12 +564,15 @@ END_P SET_VAR DELIMITER
 %type <node> create_server_stmt server_options_list server_option alter_server_stmt drop_server_stmt create_logfile_group_stmt logfile_group_info add_log_file lg_undofile lg_redofile logfile_group_options  opt_ts_initial_size opt_ts_undo_buffer_size opt_ts_redo_buffer_size opt_ts_engine opt_ts_comment
 %type <node> alter_logfile_group_stmt alter_logfile_group_info alter_logfile_group_option_list alter_logfile_group_options alter_logfile_group_option drop_logfile_group_stmt drop_ts_options_list drop_ts_options drop_ts_option opt_ts_nodegroup logfile_group_option logfile_group_option_list
 %type <node> service_name_stmt service_op
+%type <node> rebuild_tablet_id_list_expr rebuild_tablet_destination rebuild_tablet_source
+
 %type <node> ttl_definition ttl_expr ttl_unit
 %type <node> id_dot_id id_dot_id_dot_id
 %type <node> vector_distance_expr vector_distance_metric
 %type <node> any_expr opt_null_pos lambda_expr lambda_expr_params
 %type <node> opt_empty_table_list opt_repair_mode opt_repair_option_list repair_option repair_option_list opt_checksum_option
 %type <node> cache_index_stmt load_index_into_cache_stmt tbl_index_list tbl_index tbl_partition_list opt_tbl_partition_list tbl_index_or_partition_list tbl_index_or_partition opt_ignore_leaves key_cache_name
+%type <node> module_name info_type opt_infile
 %type <node_opt_parens> select_clause_set select_clause_set_body
 
 %start sql_stmt
@@ -1160,6 +1163,15 @@ _UTF8
     YYABORT_NO_MEMORY;
   }
 }
+| _GB2312
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
+  $$->str_value_ = parse_strdup("gb2312", result->malloc_pool_, &($$->str_len_));
+  if (OB_UNLIKELY(NULL == $$->str_value_)) {
+    yyerror(NULL, result, "No more space for mallocing string");
+    YYABORT_NO_MEMORY;
+  }
+}
 | _ASCII
 {
   malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
@@ -1173,6 +1185,42 @@ _UTF8
 {
   malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
   $$->str_value_ = parse_strdup("tis620", result->malloc_pool_, &($$->str_len_));
+  if (OB_UNLIKELY(NULL == $$->str_value_)) {
+    yyerror(NULL, result, "No more space for mallocing string");
+    YYABORT_NO_MEMORY;
+  }
+}
+| _UJIS
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
+  $$->str_value_ = parse_strdup("ujis", result->malloc_pool_, &($$->str_len_));
+  if (OB_UNLIKELY(NULL == $$->str_value_)) {
+    yyerror(NULL, result, "No more space for mallocing string");
+    YYABORT_NO_MEMORY;
+  }
+}
+| _EUCKR
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
+  $$->str_value_ = parse_strdup("euckr", result->malloc_pool_, &($$->str_len_));
+  if (OB_UNLIKELY(NULL == $$->str_value_)) {
+    yyerror(NULL, result, "No more space for mallocing string");
+    YYABORT_NO_MEMORY;
+  }
+}
+| _EUCJPMS
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
+  $$->str_value_ = parse_strdup("eucjpms", result->malloc_pool_, &($$->str_len_));
+  if (OB_UNLIKELY(NULL == $$->str_value_)) {
+    yyerror(NULL, result, "No more space for mallocing string");
+    YYABORT_NO_MEMORY;
+  }
+}
+| _CP932
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
+  $$->str_value_ = parse_strdup("cp932", result->malloc_pool_, &($$->str_len_));
   if (OB_UNLIKELY(NULL == $$->str_value_)) {
     yyerror(NULL, result, "No more space for mallocing string");
     YYABORT_NO_MEMORY;
@@ -1254,6 +1302,42 @@ _UTF8
 {
   malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
   $$->str_value_ = parse_strdup("dec8", result->malloc_pool_, &($$->str_len_));
+  if (OB_UNLIKELY(NULL == $$->str_value_)) {
+    yyerror(NULL, result, "no more space for mallocing string\n");
+    YYABORT_NO_MEMORY;
+  }
+}
+| _CP850
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
+  $$->str_value_ = parse_strdup("cp850", result->malloc_pool_, &($$->str_len_));
+  if (OB_UNLIKELY(NULL == $$->str_value_)) {
+    yyerror(NULL, result, "no more space for mallocing string\n");
+    YYABORT_NO_MEMORY;
+  }
+}
+| _HP8
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
+  $$->str_value_ = parse_strdup("hp8", result->malloc_pool_, &($$->str_len_));
+  if (OB_UNLIKELY(NULL == $$->str_value_)) {
+    yyerror(NULL, result, "no more space for mallocing string\n");
+    YYABORT_NO_MEMORY;
+  }
+}
+| _MACROMAN
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
+  $$->str_value_ = parse_strdup("macroman", result->malloc_pool_, &($$->str_len_));
+  if (OB_UNLIKELY(NULL == $$->str_value_)) {
+    yyerror(NULL, result, "no more space for mallocing string\n");
+    YYABORT_NO_MEMORY;
+  }
+}
+| _SWE7
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
+  $$->str_value_ = parse_strdup("swe7", result->malloc_pool_, &($$->str_len_));
   if (OB_UNLIKELY(NULL == $$->str_value_)) {
     yyerror(NULL, result, "no more space for mallocing string\n");
     YYABORT_NO_MEMORY;
@@ -3416,6 +3500,18 @@ MOD '(' expr ',' expr ')'
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_FUNC_SYS_ARRAY_MAP, 2, $3, $5);
 }
+| ARRAY_FIRST '(' lambda_expr ',' expr_list ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FUNC_SYS_ARRAY_FIRST, 2, $3, $5);
+}
+| ARRAY_SORTBY '(' lambda_expr ',' expr_list ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FUNC_SYS_ARRAY_SORTBY, 2, $3, $5);
+}
+| ARRAY_FILTER '(' lambda_expr ',' expr_list ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FUNC_SYS_ARRAY_FILTER, 2, $3, $5);
+}
 ;
 
 lambda_expr_params:
@@ -3428,11 +3524,11 @@ NAME_OB { $$ = $1;}
 ;
 
 lambda_expr:
-lambda_expr_params JSON_EXTRACT '(' expr ')'
+lambda_expr_params JSON_EXTRACT expr
 {
   ParseNode *params = NULL;
   merge_nodes(params, result, T_EXPR_LIST, $1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_FUNC_SYS_LAMBDA, 2, params, $4);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FUNC_SYS_LAMBDA, 2, params, $3);
 }
 ;
 
@@ -7607,6 +7703,11 @@ TABLE_MODE opt_equal_mark STRING_VALUE
   (void)($2); /*  make bison mute*/
   malloc_non_terminal_node($$, result->malloc_pool_, T_MICRO_INDEX_CLUSTERED, 1, $3);
 }
+| ENABLE_MACRO_BLOCK_BLOOM_FILTER opt_equal_mark BOOL_VALUE
+{
+  (void)($2); /*  make bison mute*/
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ENABLE_MACRO_BLOCK_BLOOM_FILTER, 1, $3);
+}
 | AUTO_REFRESH opt_equal_mark OFF
 {
   (void)($2) ; /* make bison mute */
@@ -9727,8 +9828,51 @@ index_option
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_PARSER_NAME, 1, $3);
 }
+| PARSER_PROPERTIES opt_equal_mark '(' fulltext_parser_properties_list ')'
+{
+  (void)($2) ; /* make bison mute */
+  merge_nodes($$, result, T_PARSER_PROPERTIES, $4);
+}
 ;
 
+fulltext_parser_properties_list:
+fulltext_parser_properties
+{
+  $$ = $1;
+}
+| fulltext_parser_properties_list opt_comma fulltext_parser_properties
+{
+  (void)($2) ; /* make bison mute */
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+fulltext_parser_properties:
+MIN_TOKEN_SIZE COMP_EQ INTNUM
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_PARSER_MIN_TOKEN_SIZE, 1, $3);
+}
+| MAX_TOKEN_SIZE COMP_EQ INTNUM
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_PARSER_MAX_TOKEN_SIZE, 1, $3);
+}
+| NGRAM_TOKEN_SIZE COMP_EQ INTNUM
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_PARSER_NGRAM_TOKEN_SIZE, 1, $3);
+}
+| STOPWORD_TABLE COMP_EQ STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_PARSER_STOPWORD_TABLE, 1, $3);
+}
+| DICT_TABLE COMP_EQ STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_PARSER_DICT_TABLE, 1, $3);
+}
+| QUANTIFIER_TABLE COMP_EQ STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_PARSER_QUANTIFIER_TABLE, 1, $3);
+}
+;
 
 index_option:
 GLOBAL
@@ -20007,6 +20151,12 @@ alter_with_opt_hint SYSTEM BACKUP BACKUPPIECE ALL NOT BACKED UP INTNUM TIMES opt
   malloc_non_terminal_node($$, result->malloc_pool_, T_BACKUP_BACKUPPIECE, 7, piece_id, backup_all, backup_times, $11, $12, $13, type);
 }
 |
+alter_with_opt_hint SYSTEM info_type MODULE DATA module_name tenant_name opt_infile
+{
+  (void)($1);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_MODULE_DATA, 4, $3, $6, $7, $8);
+}
+|
 SET ENCRYPTION ON IDENTIFIED BY STRING_VALUE ONLY
 {
   ParseNode *mode = NULL;
@@ -20022,6 +20172,12 @@ SET DECRYPTION IDENTIFIED BY string_list
   result->contain_sensitive_data_ = true;
   merge_nodes(string_list_node, result, T_STRING_LIST, $5);
   malloc_non_terminal_node($$, result->malloc_pool_, T_BACKUP_SET_DECRYPTION, 1, string_list_node);
+}
+|
+alter_with_opt_hint SYSTEM REBUILD TABLET ls rebuild_tablet_id_list_expr rebuild_tablet_destination rebuild_tablet_source opt_tenant_name
+{
+ (void)($1);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REBUILD_TABLET, 5, $5, $6, $7, $8, $9);
 }
 |
 alter_with_opt_hint SYSTEM RESET alter_system_reset_parameter_actions
@@ -21340,6 +21496,40 @@ file_id
 }
 ;
 
+module_name:
+MODULE opt_equal_mark relation_name_or_string
+{
+  (void)($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_MODULE_NAME, 1, $3);
+}
+;
+
+info_type:
+LOAD
+{
+  // START is 0
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->value_ = 0;
+}
+| CHECK
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->value_ = 1;
+}
+;
+
+opt_infile:
+INFILE opt_equal_mark STRING_VALUE
+{
+  (void)($2);
+  $$ = $3;
+}
+| /* EMPTY */
+{
+  $$ = NULL;
+}
+;
+
 cancel_task_type:
 PARTITION MIGRATION
 {
@@ -21501,6 +21691,30 @@ NAME_OB opt_config_scope opt_tenant_name
                           $3  /* tenant */
                           );
   $$->value_ = $2[0];
+}
+;
+
+rebuild_tablet_id_list_expr:
+TABLETS opt_equal_mark STRING_VALUE
+{
+  (void)($2);
+  $$ = $3;
+}
+;
+
+rebuild_tablet_destination:
+DESTINATION opt_equal_mark STRING_VALUE
+{
+  (void)($2);
+  $$ = $3;
+}
+;
+
+rebuild_tablet_source:
+SOURCE opt_equal_mark STRING_VALUE
+{
+  (void)($2);
+  $$ = $3;
 }
 ;
 
@@ -24211,7 +24425,10 @@ ACCESS_INFO
 |       AVG
 |       AVG_ROW_LENGTH
 |       ARRAY_AGG
+|       ARRAY_FIRST
 |       ARRAY_MAP
+|       ARRAY_SORTBY
+|       ARRAY_FILTER
 |       BACKUP
 |       BACKUPSET
 |       BACKUP_COPIES
@@ -24341,6 +24558,7 @@ ACCESS_INFO
 |       DESTINATION
 |       DEMAND
 |       DIAGNOSTICS
+|       DICT_TABLE
 |       DIRECTORY
 |       DISABLE
 |       DISALLOW
@@ -24364,6 +24582,7 @@ ACCESS_INFO
 |       ENABLE
 |       ENABLE_ARBITRATION_SERVICE
 |       ENABLE_EXTENDED_ROWID
+|       ENABLE_MACRO_BLOCK_BLOOM_FILTER
 |       ENCODING
 |       ENCRYPTED
 |       ENCRYPTION
@@ -24396,8 +24615,8 @@ ACCESS_INFO
 |       EXTENT_SIZE
 |       EXTERNAL
 |       EXTERNAL_STORAGE_DEST
-|       FAILOVER
 |       EXTRACT
+|       FAILOVER
 |       FAST
 |       FAULTS
 |       FLASHBACK
@@ -24545,6 +24764,7 @@ ACCESS_INFO
 |       MAX_QUERIES_PER_HOUR
 |       MAX_ROWS
 |       MAX_SIZE
+|       MAX_TOKEN_SIZE
 |       MAX_UPDATES_PER_HOUR
 |       MAX_USER_CONNECTIONS
 |       MEDIUM
@@ -24563,6 +24783,7 @@ ACCESS_INFO
 |       MIN_CPU
 |       MIN_IOPS
 |       MIN_MAX
+|       MIN_TOKEN_SIZE
 |       MINOR
 |       MIN_ROWS
 |       MINUTE
@@ -24570,6 +24791,7 @@ ACCESS_INFO
 |       MISMATCH
 |       MODE
 |       MODIFY
+|       MODULE
 |       MONTH
 |       MOVE
 |       MULTILINESTRING
@@ -24590,6 +24812,7 @@ ACCESS_INFO
 |       NEW
 |       NEVER
 |       NEXT
+|       NGRAM_TOKEN_SIZE
 |       NO
 |       NOARCHIVELOG
 |       NOAUDIT
@@ -24637,6 +24860,7 @@ ACCESS_INFO
 |       PARALLEL
 |       PARAMETERS
 |       PARSER
+|       PARSER_PROPERTIES
 |       PARTIAL
 |       PARTITION_ID
 |       PATH
@@ -24682,6 +24906,7 @@ ACCESS_INFO
 |       PCTFREE
 |       P_ENTITY
 |       P_CHUNK
+|       QUANTIFIER_TABLE
 |       QUARTER
 |       QUERY %prec KILL_EXPR
 |       QUERY_RESPONSE_TIME
@@ -24832,6 +25057,7 @@ ACCESS_INFO
 |       STDDEV_POP
 |       STDDEV_SAMP
 |       STOP
+|       STOPWORD_TABLE
 |       STORAGE
 |       STORAGE_FORMAT_VERSION
 |       STORE
@@ -24872,6 +25098,7 @@ ACCESS_INFO
 |       TABLET_MAX_SIZE
 |       TASK
 |       TASK_ID
+|       TABLETS
 |       TEMPLATE
 |       TEMPORARY
 |       TEMPTABLE

@@ -11,13 +11,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "lib/utility/ob_tracepoint.h"
-#include "sql/engine/expr/ob_expr_util.h"
-#include "sql/session/ob_sql_session_info.h"
-#include "sql/ob_sql_utils.h"
-#include "common/ob_smart_call.h"
+#include "ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "lib/charset/ob_charset.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -760,6 +755,30 @@ int ObExprUtil::convert_utf8_charset(ObIAllocator& allocator,
     LOG_WARN("charset convert failed", K(ret), K(from_collation), K(CS_TYPE_UTF8MB4_BIN));
   } else {
     to_string.assign(buf, static_cast<int32_t>(result_len));
+  }
+  return ret;
+}
+
+int ObExprUtil::get_real_expr_without_cast(const ObExpr *expr, const ObExpr *&out_expr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(expr)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("expr is NULL", K(ret));
+  } else {
+    while (T_FUN_SYS_CAST == expr->type_ && CM_IS_IMPLICIT_CAST(expr->extra_)) {
+      if (OB_UNLIKELY(2 != expr->arg_cnt_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("param_count of cast expr should be 2", K(ret), K(*expr));
+      } else if (OB_ISNULL(expr = expr->args_[0])) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("first child of cast expr is NULL", K(ret), K(*expr));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      out_expr = expr;
+      LOG_DEBUG("get_real_expr_without_cast done", K(*out_expr));
+    }
   }
   return ret;
 }

@@ -80,6 +80,7 @@ namespace schema
       }\
     }\
 
+typedef common::ObSEArray<uint64_t, 8>  EnableRoleIdArray;
 typedef common::ParamStore ParamStore;
 class ObSchemaGetterGuard;
 class ObSimpleTableSchemaV2;
@@ -160,7 +161,6 @@ static const uint64_t OB_MIN_ID  = 0;//used for lower_bound
 #define GENERATED_VEC_IVF_META_VECTOR_COLUMN_FLAG (INT64_C(1) << 47)
 #define GENERATED_VEC_IVF_PQ_CENTER_ID_COLUMN_FLAG (INT64_C(1) << 48)
 #define GENERATED_VEC_IVF_PQ_CENTER_IDS_COLUMN_FLAG (INT64_C(1) << 49)
-
 #define SPATIAL_COLUMN_SRID_MASK (0xffffffffffffffe0L)
 
 #define STORED_COLUMN_FLAGS_MASK 0xFFFFFFFF
@@ -320,13 +320,16 @@ const int64_t OB_AUX_LOB_TABLE_CNT = 2; // aux lob meta + aux lob piece
 // Some special indexes such as full-text index(FTS), multi-value index, vector index, etc., have multiple aux tables.
 // The current index with max aux tables: vector index
 // They need to be changed at the same time, choosing OB_MAX_AUX_TABLE_PER_MAIN_TABLE is larger.
-const int64_t OB_MAX_SHARED_TABLE_CNT_PER_INDEX_TYPE = 2; // number of common aux tables for all vect indexes in a table.
-const int64_t OB_MAX_TABLE_CNT_PER_INDEX = 3; // number of aux tables private per vec index.
+
+// number of common aux tables for vec hnsw indexes in a table, vec ivf index has no shared index
+const int64_t OB_MAX_SHARED_TABLE_CNT_PER_INDEX_TYPE = 2;
+// number of aux tables private per vec index, vec hnsw index max aux is 3, vec ivf index max aux is 4, here take 4 (max)
+const int64_t OB_MAX_TABLE_CNT_PER_INDEX = 4;
 // The max count of aux tables with physical tablets per user data table.
 const int64_t OB_MAX_AUX_TABLE_PER_MAIN_TABLE = OB_MAX_INDEX_PER_TABLE * OB_MAX_TABLE_CNT_PER_INDEX +
-                                           OB_MAX_SHARED_TABLE_CNT_PER_INDEX_TYPE + OB_AUX_LOB_TABLE_CNT + OB_MLOG_TABLE_CNT; // 389
+                                           OB_MAX_SHARED_TABLE_CNT_PER_INDEX_TYPE + OB_AUX_LOB_TABLE_CNT + OB_MLOG_TABLE_CNT; // 517
 // The max tablet count of a transfer is one data table tablet with max aux tablets bound together.
-const int64_t OB_MAX_TRANSFER_BINDING_TABLET_CNT = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1; // 390
+const int64_t OB_MAX_TRANSFER_BINDING_TABLET_CNT = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1; // 518
 
 // Note: When adding new index type, you should modifiy "tools/obtest/t/quick/partition_balance.test" and
 //       "tools/obtest/t/shared_storage/local_cache/partition_balance.test" to verify that all aux tables of the new index
@@ -371,6 +374,7 @@ enum ObIndexType
   // new index types for json multivalue index
   INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL = 23,
   INDEX_TYPE_UNIQUE_MULTIVALUE_LOCAL = 24,
+  // vec hnsw
   INDEX_TYPE_VEC_ROWKEY_VID_LOCAL = 25,
   INDEX_TYPE_VEC_VID_ROWKEY_LOCAL = 26,
   INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL = 27,
@@ -684,13 +688,161 @@ inline bool is_available_index_status(const ObIndexStatus index_status)
 
 const char *ob_index_status_str(ObIndexStatus status);
 
+inline bool is_vec_rowkey_vid_type(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_ROWKEY_VID_LOCAL;
+}
+
+inline bool is_vec_vid_rowkey_type(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_VID_ROWKEY_LOCAL;
+}
+
+inline bool is_vec_delta_buffer_type(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL;
+}
+
+inline bool is_vec_index_id_type(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_INDEX_ID_LOCAL;
+}
+
+inline bool is_vec_index_snapshot_data_type(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL;
+}
+
+inline bool is_vec_ivfflat_centroid_index(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_IVFFLAT_CENTROID_LOCAL;
+}
+
+inline bool is_vec_ivfflat_cid_vector_index(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_IVFFLAT_CID_VECTOR_LOCAL;
+}
+
+inline bool is_vec_ivfflat_rowkey_cid_index(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_IVFFLAT_ROWKEY_CID_LOCAL;
+}
+
+inline bool is_vec_ivfsq8_meta_index(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_IVFSQ8_META_LOCAL;
+}
+
+inline bool is_vec_ivfsq8_centroid_index(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_IVFSQ8_CENTROID_LOCAL;
+}
+
+inline bool is_vec_ivfsq8_rowkey_cid_index(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_IVFSQ8_ROWKEY_CID_LOCAL;
+}
+
+inline bool is_vec_ivfsq8_cid_vector_index(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_IVFSQ8_CID_VECTOR_LOCAL;
+}
+
+inline bool is_vec_ivfpq_centroid_index(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_IVFPQ_CENTROID_LOCAL;
+}
+
+inline bool is_vec_ivfpq_pq_centroid_index(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_IVFPQ_PQ_CENTROID_LOCAL;
+}
+
+inline bool is_vec_ivfpq_code_index(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_IVFPQ_CODE_LOCAL;
+}
+
+inline bool is_vec_ivfpq_rowkey_cid_index(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_IVFPQ_ROWKEY_CID_LOCAL;
+}
+
+inline bool is_local_vec_ivfflat_index(const ObIndexType index_type)
+{
+  return is_vec_ivfflat_centroid_index(index_type) ||
+         is_vec_ivfflat_cid_vector_index(index_type) ||
+         is_vec_ivfflat_rowkey_cid_index(index_type);
+}
+
+inline bool is_local_vec_ivfsq8_index(const ObIndexType index_type)
+{
+  return is_vec_ivfsq8_centroid_index(index_type) ||
+         is_vec_ivfsq8_meta_index(index_type) ||
+         is_vec_ivfsq8_cid_vector_index(index_type) ||
+         is_vec_ivfsq8_rowkey_cid_index(index_type);
+}
+
+inline bool is_local_vec_ivfpq_index(const ObIndexType index_type)
+{
+  return is_vec_ivfpq_centroid_index(index_type) ||
+         is_vec_ivfpq_pq_centroid_index(index_type) ||
+         is_vec_ivfpq_code_index(index_type) ||
+         is_vec_ivfpq_rowkey_cid_index(index_type);
+}
+
+inline bool is_local_vec_ivf_centroid_index(const ObIndexType index_type)
+{
+  return index_type == INDEX_TYPE_VEC_IVFFLAT_CENTROID_LOCAL
+      || index_type == INDEX_TYPE_VEC_IVFSQ8_CENTROID_LOCAL
+      || index_type == INDEX_TYPE_VEC_IVFPQ_CENTROID_LOCAL;
+}
+
+inline bool is_local_vec_ivf_index(const ObIndexType index_type)
+{
+  return is_local_vec_ivfflat_index(index_type) ||
+         is_local_vec_ivfsq8_index(index_type) ||
+         is_local_vec_ivfpq_index(index_type);
+}
+
+inline bool is_vec_ivf_index(const ObIndexType index_type)
+{
+  return is_local_vec_ivf_index(index_type);
+}
+
+inline bool is_vec_ivfflat_index(const ObIndexType index_type)
+{
+  return is_local_vec_ivfflat_index(index_type);
+}
+
+inline bool is_vec_ivfsq8_index(const ObIndexType index_type)
+{
+  return is_local_vec_ivfsq8_index(index_type);
+}
+
+inline bool is_vec_ivfpq_index(const ObIndexType index_type)
+{
+  return is_local_vec_ivfpq_index(index_type);
+}
+
+inline bool is_local_vec_hnsw_index(const ObIndexType index_type)
+{
+  return is_vec_rowkey_vid_type(index_type) ||
+         is_vec_vid_rowkey_type(index_type) ||
+         is_vec_delta_buffer_type(index_type) ||
+         is_vec_index_id_type(index_type) ||
+         is_vec_index_snapshot_data_type(index_type);
+}
+
+inline bool is_vec_hnsw_index(const ObIndexType index_type)
+{
+  return is_local_vec_hnsw_index(index_type);
+}
+
 inline bool is_local_vec_index(const ObIndexType index_type)
 {
-  return index_type == INDEX_TYPE_VEC_ROWKEY_VID_LOCAL ||
-         index_type == INDEX_TYPE_VEC_VID_ROWKEY_LOCAL ||
-         index_type == INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL ||
-         index_type == INDEX_TYPE_VEC_INDEX_ID_LOCAL ||
-         index_type == INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL;
+  return is_local_vec_hnsw_index(index_type) ||
+         is_local_vec_ivf_index(index_type);
 }
 
 inline bool is_local_fts_index(const ObIndexType index_type)
@@ -788,32 +940,19 @@ inline bool is_fts_or_multivalue_index_aux(ObIndexType index_type)
   return is_multivalue_index_aux(index_type) || is_fts_index_aux(index_type);
 }
 
-inline bool is_vec_rowkey_vid_type(const ObIndexType index_type)
+inline bool is_built_in_vec_ivf_index(const ObIndexType index_type)
 {
-  return index_type == INDEX_TYPE_VEC_ROWKEY_VID_LOCAL;
+  return is_vec_ivfflat_cid_vector_index(index_type) ||
+         is_vec_ivfflat_rowkey_cid_index(index_type) ||
+         is_vec_ivfsq8_meta_index(index_type) ||
+         is_vec_ivfsq8_cid_vector_index(index_type) ||
+         is_vec_ivfsq8_rowkey_cid_index(index_type) ||
+         is_vec_ivfpq_pq_centroid_index(index_type) ||
+         is_vec_ivfpq_code_index(index_type) ||
+         is_vec_ivfpq_rowkey_cid_index(index_type);
 }
 
-inline bool is_vec_vid_rowkey_type(const ObIndexType index_type)
-{
-  return index_type == INDEX_TYPE_VEC_VID_ROWKEY_LOCAL;
-}
-
-inline bool is_vec_delta_buffer_type(const ObIndexType index_type)
-{
-  return index_type == INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL;
-}
-
-inline bool is_vec_index_id_type(const ObIndexType index_type)
-{
-  return index_type == INDEX_TYPE_VEC_INDEX_ID_LOCAL;
-}
-
-inline bool is_vec_index_snapshot_data_type(const ObIndexType index_type)
-{
-  return index_type == INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL;
-}
-
-inline bool is_built_in_vec_index(const ObIndexType index_type)
+inline bool is_built_in_vec_hnsw_index(const ObIndexType index_type)
 {
   return is_vec_rowkey_vid_type(index_type) ||
          is_vec_vid_rowkey_type(index_type) ||
@@ -821,9 +960,24 @@ inline bool is_built_in_vec_index(const ObIndexType index_type)
          is_vec_index_snapshot_data_type(index_type);
 }
 
+inline bool is_built_in_vec_index(const ObIndexType index_type)
+{
+  return is_built_in_vec_hnsw_index(index_type) ||
+         is_built_in_vec_ivf_index(index_type);
+}
+
+inline bool is_vec_domain_index(const ObIndexType index_type)
+{
+  return is_vec_delta_buffer_type(index_type) ||
+         is_vec_ivfflat_centroid_index(index_type) ||
+         is_vec_ivfsq8_centroid_index(index_type) ||
+         is_vec_ivfpq_centroid_index(index_type);
+}
+
 inline bool is_vec_index(const ObIndexType index_type)
 {
-  return is_vec_delta_buffer_type(index_type) || is_built_in_vec_index(index_type);
+  return is_vec_domain_index(index_type) ||
+         is_built_in_vec_index(index_type);
 }
 
 
@@ -1273,8 +1427,13 @@ struct ObSchemaObjVersion
   inline bool operator !=(const ObSchemaObjVersion &other) const { return !operator ==(other); }
   ObSchemaType get_schema_type() const
   {
+    return get_schema_type(object_type_);
+  }
+
+  static  ObSchemaType get_schema_type(ObDependencyTableType object_type)
+  {
     ObSchemaType ret_type = OB_MAX_SCHEMA;
-    switch (object_type_) {
+    switch (object_type) {
       case DEPENDENCY_TABLE:
       case DEPENDENCY_VIEW:
         ret_type = TABLE_SCHEMA;
@@ -1311,6 +1470,7 @@ struct ObSchemaObjVersion
     }
     return ret_type;
   }
+
   static ObObjectType get_schema_object_type(ObDependencyTableType object_type)
   {
     ObObjectType ret_type = ObObjectType::MAX_TYPE;
@@ -4619,9 +4779,9 @@ public:
   // role
   inline bool is_role() const { return OB_ROLE == type_; }
   inline int64_t get_role_count() const { return role_id_array_.count(); }
-  const common::ObSEArray<uint64_t, 8>& get_grantee_id_array() const { return grantee_id_array_; }
-  const common::ObSEArray<uint64_t, 8>& get_role_id_array() const { return role_id_array_; }
-  const common::ObSEArray<uint64_t, 8>& get_role_id_option_array() const { return role_id_option_array_; }
+  const EnableRoleIdArray& get_grantee_id_array() const { return grantee_id_array_; }
+  const EnableRoleIdArray& get_role_id_array() const { return role_id_array_; }
+  const EnableRoleIdArray& get_role_id_option_array() const { return role_id_option_array_; }
   uint64_t get_proxied_user_info_cnt() const { return proxied_user_info_cnt_; }
   uint64_t get_proxy_user_info_cnt() const { return proxy_user_info_cnt_; }
   const ObProxyInfo* get_proxied_user_info_by_idx(uint64_t idx) const;
@@ -4665,7 +4825,9 @@ public:
     user_flags_.proxy_activated_flag_ = flag;
   }
   inline ObProxyActivatedFlag get_proxy_activated_flag() { return (ObProxyActivatedFlag)(user_flags_.proxy_activated_flag_); }
-
+  inline common::ObIArray<uint64_t> &get_trigger_list() { return trigger_list_; }
+  inline const common::ObIArray<uint64_t> &get_trigger_list() const { return trigger_list_; }
+  inline void reset_trigger_list() { trigger_list_.reset(); }
 private:
   int add_proxy_info_(ObProxyInfo **&arr, uint64_t &capacity, uint64_t &cnt, const ObProxyInfo &proxy_info);
   int assign_proxy_info_array_(ObProxyInfo **src_arr,
@@ -4690,11 +4852,11 @@ private:
   common::ObString x509_subject_;
 
   int type_;
-  common::ObSEArray<uint64_t, 8> grantee_id_array_; // Record role granted to user
-  common::ObSEArray<uint64_t, 8> role_id_array_; // Record which roles the user/role has
+  EnableRoleIdArray grantee_id_array_; // Record role granted to user
+  EnableRoleIdArray role_id_array_; // Record which roles the user/role has
   uint64_t profile_id_;
   int64_t password_last_changed_timestamp_;
-  common::ObSEArray<uint64_t, 8> role_id_option_array_; // Record which roles the user/role has
+  EnableRoleIdArray role_id_option_array_; // Record which roles the user/role has
   uint64_t max_connections_;
   uint64_t max_user_connections_;
   ObProxyInfo** proxied_user_info_; //record users who can proxy the user
@@ -5754,31 +5916,10 @@ struct ObSessionPrivInfo
       user_priv_set_(0),
       db_priv_set_(0),
       effective_tenant_id_(common::OB_INVALID_ID),
-      enable_role_id_array_(),
       security_version_(0),
       proxy_user_id_(),
       proxy_user_name_(),
       proxy_host_name_()
-  {}
-  ObSessionPrivInfo(const uint64_t tenant_id,
-                    const uint64_t effective_tenant_id,
-                    const uint64_t user_id,
-                    const common::ObString &db,
-                    const ObPrivSet user_priv_set,
-                    const ObPrivSet db_priv_set)
-      : tenant_id_(tenant_id),
-        user_id_(user_id),
-        user_name_(),
-        host_name_(),
-        db_(db),
-        user_priv_set_(user_priv_set),
-        db_priv_set_(db_priv_set),
-        effective_tenant_id_(effective_tenant_id),
-        enable_role_id_array_(),
-        security_version_(0),
-        proxy_user_id_(),
-        proxy_user_name_(),
-        proxy_host_name_()
   {}
 
   virtual ~ObSessionPrivInfo() {}
@@ -5800,7 +5941,6 @@ struct ObSessionPrivInfo
     db_.reset();
     user_priv_set_ = 0;
     db_priv_set_ = 0;
-    enable_role_id_array_.reset();
     security_version_ = 0;
     proxy_user_id_ = common::OB_INVALID_ID;
     proxy_user_name_.reset();
@@ -5822,7 +5962,6 @@ struct ObSessionPrivInfo
   ObPrivSet db_priv_set_;    //user's db_priv_set of db
   // Only used for privilege check to determine whether there are currently tenants, otherwise the value is illegal
   uint64_t effective_tenant_id_;
-  common::ObSEArray<uint64_t, 8> enable_role_id_array_;
   uint64_t security_version_;
   uint64_t proxy_user_id_;
   common::ObString proxy_user_name_;

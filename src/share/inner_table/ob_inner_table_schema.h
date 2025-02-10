@@ -653,7 +653,11 @@ public:
   static int all_pkg_type_attr_schema(share::schema::ObTableSchema &table_schema);
   static int all_pkg_coll_type_schema(share::schema::ObTableSchema &table_schema);
   static int wr_sql_plan_schema(share::schema::ObTableSchema &table_schema);
+  static int all_kv_redis_table_schema(share::schema::ObTableSchema &table_schema);
   static int all_ncomp_dll_v2_schema(share::schema::ObTableSchema &table_schema);
+  static int ft_dict_ik_utf8_schema(share::schema::ObTableSchema &table_schema);
+  static int ft_stopword_ik_utf8_schema(share::schema::ObTableSchema &table_schema);
+  static int ft_quantifier_ik_utf8_schema(share::schema::ObTableSchema &table_schema);
   static int tenant_virtual_all_table_schema(share::schema::ObTableSchema &table_schema);
   static int tenant_virtual_table_column_schema(share::schema::ObTableSchema &table_schema);
   static int tenant_virtual_table_index_schema(share::schema::ObTableSchema &table_schema);
@@ -752,7 +756,6 @@ public:
   static int user_schema(share::schema::ObTableSchema &table_schema);
   static int db_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_lock_wait_stat_schema(share::schema::ObTableSchema &table_schema);
-  static int proc_schema(share::schema::ObTableSchema &table_schema);
   static int tenant_virtual_collation_schema(share::schema::ObTableSchema &table_schema);
   static int tenant_virtual_charset_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_tenant_memstore_allocator_info_schema(share::schema::ObTableSchema &table_schema);
@@ -1138,10 +1141,12 @@ public:
   static int all_virtual_pkg_coll_type_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_kv_client_info_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_wr_sql_plan_schema(share::schema::ObTableSchema &table_schema);
+  static int all_virtual_kv_redis_table_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_function_io_stat_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_temp_file_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_ncomp_dll_v2_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_ddl_diagnose_info_schema(share::schema::ObTableSchema &table_schema);
+  static int all_virtual_plugin_info_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_sql_audit_ora_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_plan_stat_ora_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_plan_cache_plan_explain_ora_schema(share::schema::ObTableSchema &table_schema);
@@ -1959,10 +1964,15 @@ public:
   static int cdb_wr_sql_plan_schema(share::schema::ObTableSchema &table_schema);
   static int dba_ob_spm_evo_result_schema(share::schema::ObTableSchema &table_schema);
   static int cdb_ob_spm_evo_result_schema(share::schema::ObTableSchema &table_schema);
+  static int dba_ob_kv_redis_table_schema(share::schema::ObTableSchema &table_schema);
+  static int cdb_ob_kv_redis_table_schema(share::schema::ObTableSchema &table_schema);
   static int gv_ob_function_io_stat_schema(share::schema::ObTableSchema &table_schema);
   static int v_ob_function_io_stat_schema(share::schema::ObTableSchema &table_schema);
   static int dba_ob_temp_files_schema(share::schema::ObTableSchema &table_schema);
   static int cdb_ob_temp_files_schema(share::schema::ObTableSchema &table_schema);
+  static int proc_schema(share::schema::ObTableSchema &table_schema);
+  static int gv_ob_plugins_schema(share::schema::ObTableSchema &table_schema);
+  static int v_ob_plugins_schema(share::schema::ObTableSchema &table_schema);
   static int dba_synonyms_schema(share::schema::ObTableSchema &table_schema);
   static int dba_objects_ora_schema(share::schema::ObTableSchema &table_schema);
   static int all_objects_schema(share::schema::ObTableSchema &table_schema);
@@ -2792,7 +2802,11 @@ public:
   static int all_pkg_type_attr_aux_lob_meta_schema(share::schema::ObTableSchema &table_schema);
   static int all_pkg_coll_type_aux_lob_meta_schema(share::schema::ObTableSchema &table_schema);
   static int wr_sql_plan_aux_lob_meta_schema(share::schema::ObTableSchema &table_schema);
+  static int all_kv_redis_table_aux_lob_meta_schema(share::schema::ObTableSchema &table_schema);
   static int all_ncomp_dll_v2_aux_lob_meta_schema(share::schema::ObTableSchema &table_schema);
+  static int ft_dict_ik_utf8_aux_lob_meta_schema(share::schema::ObTableSchema &table_schema);
+  static int ft_stopword_ik_utf8_aux_lob_meta_schema(share::schema::ObTableSchema &table_schema);
+  static int ft_quantifier_ik_utf8_aux_lob_meta_schema(share::schema::ObTableSchema &table_schema);
   static int all_table_aux_lob_piece_schema(share::schema::ObTableSchema &table_schema);
   static int all_column_aux_lob_piece_schema(share::schema::ObTableSchema &table_schema);
   static int all_ddl_operation_aux_lob_piece_schema(share::schema::ObTableSchema &table_schema);
@@ -3110,7 +3124,11 @@ public:
   static int all_pkg_type_attr_aux_lob_piece_schema(share::schema::ObTableSchema &table_schema);
   static int all_pkg_coll_type_aux_lob_piece_schema(share::schema::ObTableSchema &table_schema);
   static int wr_sql_plan_aux_lob_piece_schema(share::schema::ObTableSchema &table_schema);
+  static int all_kv_redis_table_aux_lob_piece_schema(share::schema::ObTableSchema &table_schema);
   static int all_ncomp_dll_v2_aux_lob_piece_schema(share::schema::ObTableSchema &table_schema);
+  static int ft_dict_ik_utf8_aux_lob_piece_schema(share::schema::ObTableSchema &table_schema);
+  static int ft_stopword_ik_utf8_aux_lob_piece_schema(share::schema::ObTableSchema &table_schema);
+  static int ft_quantifier_ik_utf8_aux_lob_piece_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_ddl_diagnose_info_all_virtual_ddl_diagnose_info_i1_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_ash_all_virtual_ash_i1_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_sql_plan_monitor_all_virtual_sql_plan_monitor_i1_schema(share::schema::ObTableSchema &table_schema);
@@ -3662,7 +3680,11 @@ const schema_create_func sys_table_schema_creators [] = {
   ObInnerTableSchema::all_pkg_type_attr_schema,
   ObInnerTableSchema::all_pkg_coll_type_schema,
   ObInnerTableSchema::wr_sql_plan_schema,
+  ObInnerTableSchema::all_kv_redis_table_schema,
   ObInnerTableSchema::all_ncomp_dll_v2_schema,
+  ObInnerTableSchema::ft_dict_ik_utf8_schema,
+  ObInnerTableSchema::ft_stopword_ik_utf8_schema,
+  ObInnerTableSchema::ft_quantifier_ik_utf8_schema,
   NULL,};
 
 const schema_create_func virtual_table_schema_creators [] = {
@@ -3764,7 +3786,6 @@ const schema_create_func virtual_table_schema_creators [] = {
   ObInnerTableSchema::user_schema,
   ObInnerTableSchema::db_schema,
   ObInnerTableSchema::all_virtual_lock_wait_stat_schema,
-  ObInnerTableSchema::proc_schema,
   ObInnerTableSchema::tenant_virtual_collation_schema,
   ObInnerTableSchema::tenant_virtual_charset_schema,
   ObInnerTableSchema::all_virtual_tenant_memstore_allocator_info_schema,
@@ -4150,10 +4171,12 @@ const schema_create_func virtual_table_schema_creators [] = {
   ObInnerTableSchema::all_virtual_pkg_coll_type_schema,
   ObInnerTableSchema::all_virtual_kv_client_info_schema,
   ObInnerTableSchema::all_virtual_wr_sql_plan_schema,
+  ObInnerTableSchema::all_virtual_kv_redis_table_schema,
   ObInnerTableSchema::all_virtual_function_io_stat_schema,
   ObInnerTableSchema::all_virtual_temp_file_schema,
   ObInnerTableSchema::all_virtual_ncomp_dll_v2_schema,
   ObInnerTableSchema::all_virtual_ddl_diagnose_info_schema,
+  ObInnerTableSchema::all_virtual_plugin_info_schema,
   ObInnerTableSchema::all_virtual_ddl_diagnose_info_all_virtual_ddl_diagnose_info_i1_schema,
   ObInnerTableSchema::all_virtual_ash_all_virtual_ash_i1_schema,
   ObInnerTableSchema::all_virtual_sql_plan_monitor_all_virtual_sql_plan_monitor_i1_schema,
@@ -5075,10 +5098,15 @@ const schema_create_func sys_view_schema_creators [] = {
   ObInnerTableSchema::cdb_wr_sql_plan_schema,
   ObInnerTableSchema::dba_ob_spm_evo_result_schema,
   ObInnerTableSchema::cdb_ob_spm_evo_result_schema,
+  ObInnerTableSchema::dba_ob_kv_redis_table_schema,
+  ObInnerTableSchema::cdb_ob_kv_redis_table_schema,
   ObInnerTableSchema::gv_ob_function_io_stat_schema,
   ObInnerTableSchema::v_ob_function_io_stat_schema,
   ObInnerTableSchema::dba_ob_temp_files_schema,
   ObInnerTableSchema::cdb_ob_temp_files_schema,
+  ObInnerTableSchema::proc_schema,
+  ObInnerTableSchema::gv_ob_plugins_schema,
+  ObInnerTableSchema::v_ob_plugins_schema,
   ObInnerTableSchema::dba_synonyms_schema,
   ObInnerTableSchema::dba_objects_ora_schema,
   ObInnerTableSchema::all_objects_schema,
@@ -6016,7 +6044,11 @@ const uint64_t tenant_space_tables [] = {
   OB_ALL_PKG_TYPE_ATTR_TID,
   OB_ALL_PKG_COLL_TYPE_TID,
   OB_WR_SQL_PLAN_TID,
+  OB_ALL_KV_REDIS_TABLE_TID,
   OB_ALL_NCOMP_DLL_V2_TID,
+  OB_FT_DICT_IK_UTF8_TID,
+  OB_FT_STOPWORD_IK_UTF8_TID,
+  OB_FT_QUANTIFIER_IK_UTF8_TID,
   OB_TENANT_VIRTUAL_ALL_TABLE_TID,
   OB_TENANT_VIRTUAL_TABLE_COLUMN_TID,
   OB_TENANT_VIRTUAL_TABLE_INDEX_TID,
@@ -6095,7 +6127,6 @@ const uint64_t tenant_space_tables [] = {
   OB_USER_TID,
   OB_DB_TID,
   OB_ALL_VIRTUAL_LOCK_WAIT_STAT_TID,
-  OB_PROC_TID,
   OB_TENANT_VIRTUAL_COLLATION_TID,
   OB_TENANT_VIRTUAL_CHARSET_TID,
   OB_ALL_VIRTUAL_TABLE_MGR_TID,
@@ -6276,6 +6307,7 @@ const uint64_t tenant_space_tables [] = {
   OB_ALL_VIRTUAL_TEMP_FILE_TID,
   OB_ALL_VIRTUAL_DDL_DIAGNOSE_INFO_TID,
   OB_ALL_VIRTUAL_DDL_DIAGNOSE_INFO_ALL_VIRTUAL_DDL_DIAGNOSE_INFO_I1_TID,
+  OB_ALL_VIRTUAL_PLUGIN_INFO_TID,
   OB_ALL_VIRTUAL_SQL_AUDIT_ORA_TID,
   OB_ALL_VIRTUAL_SQL_AUDIT_ORA_ALL_VIRTUAL_SQL_AUDIT_I1_TID,
   OB_ALL_VIRTUAL_PLAN_STAT_ORA_TID,
@@ -6965,9 +6997,13 @@ const uint64_t tenant_space_tables [] = {
   OB_V_OB_RES_MGR_SYSSTAT_TID,
   OB_DBA_WR_SQL_PLAN_TID,
   OB_DBA_OB_SPM_EVO_RESULT_TID,
+  OB_DBA_OB_KV_REDIS_TABLE_TID,
   OB_GV_OB_FUNCTION_IO_STAT_TID,
   OB_V_OB_FUNCTION_IO_STAT_TID,
   OB_DBA_OB_TEMP_FILES_TID,
+  OB_PROC_TID,
+  OB_GV_OB_PLUGINS_TID,
+  OB_V_OB_PLUGINS_TID,
   OB_DBA_SYNONYMS_TID,
   OB_DBA_OBJECTS_ORA_TID,
   OB_ALL_OBJECTS_TID,
@@ -7964,7 +8000,11 @@ const uint64_t tenant_space_tables [] = {
   OB_ALL_PKG_TYPE_ATTR_AUX_LOB_META_TID,
   OB_ALL_PKG_COLL_TYPE_AUX_LOB_META_TID,
   OB_WR_SQL_PLAN_AUX_LOB_META_TID,
+  OB_ALL_KV_REDIS_TABLE_AUX_LOB_META_TID,
   OB_ALL_NCOMP_DLL_V2_AUX_LOB_META_TID,
+  OB_FT_DICT_IK_UTF8_AUX_LOB_META_TID,
+  OB_FT_STOPWORD_IK_UTF8_AUX_LOB_META_TID,
+  OB_FT_QUANTIFIER_IK_UTF8_AUX_LOB_META_TID,
   OB_ALL_TABLE_AUX_LOB_PIECE_TID,
   OB_ALL_COLUMN_AUX_LOB_PIECE_TID,
   OB_ALL_DDL_OPERATION_AUX_LOB_PIECE_TID,
@@ -8256,7 +8296,11 @@ const uint64_t tenant_space_tables [] = {
   OB_ALL_PKG_TYPE_ATTR_AUX_LOB_PIECE_TID,
   OB_ALL_PKG_COLL_TYPE_AUX_LOB_PIECE_TID,
   OB_WR_SQL_PLAN_AUX_LOB_PIECE_TID,
-  OB_ALL_NCOMP_DLL_V2_AUX_LOB_PIECE_TID,  };
+  OB_ALL_KV_REDIS_TABLE_AUX_LOB_PIECE_TID,
+  OB_ALL_NCOMP_DLL_V2_AUX_LOB_PIECE_TID,
+  OB_FT_DICT_IK_UTF8_AUX_LOB_PIECE_TID,
+  OB_FT_STOPWORD_IK_UTF8_AUX_LOB_PIECE_TID,
+  OB_FT_QUANTIFIER_IK_UTF8_AUX_LOB_PIECE_TID,  };
 
 const uint64_t all_ora_mapping_virtual_table_org_tables [] = {
   OB_ALL_VIRTUAL_SQL_AUDIT_TID,
@@ -8900,7 +8944,11 @@ const char* const tenant_space_table_names [] = {
   OB_ALL_PKG_TYPE_ATTR_TNAME,
   OB_ALL_PKG_COLL_TYPE_TNAME,
   OB_WR_SQL_PLAN_TNAME,
+  OB_ALL_KV_REDIS_TABLE_TNAME,
   OB_ALL_NCOMP_DLL_V2_TNAME,
+  OB_FT_DICT_IK_UTF8_TNAME,
+  OB_FT_STOPWORD_IK_UTF8_TNAME,
+  OB_FT_QUANTIFIER_IK_UTF8_TNAME,
   OB_TENANT_VIRTUAL_ALL_TABLE_TNAME,
   OB_TENANT_VIRTUAL_TABLE_COLUMN_TNAME,
   OB_TENANT_VIRTUAL_TABLE_INDEX_TNAME,
@@ -8979,7 +9027,6 @@ const char* const tenant_space_table_names [] = {
   OB_USER_TNAME,
   OB_DB_TNAME,
   OB_ALL_VIRTUAL_LOCK_WAIT_STAT_TNAME,
-  OB_PROC_TNAME,
   OB_TENANT_VIRTUAL_COLLATION_TNAME,
   OB_TENANT_VIRTUAL_CHARSET_TNAME,
   OB_ALL_VIRTUAL_TABLE_MGR_TNAME,
@@ -9160,6 +9207,7 @@ const char* const tenant_space_table_names [] = {
   OB_ALL_VIRTUAL_TEMP_FILE_TNAME,
   OB_ALL_VIRTUAL_DDL_DIAGNOSE_INFO_TNAME,
   OB_ALL_VIRTUAL_DDL_DIAGNOSE_INFO_ALL_VIRTUAL_DDL_DIAGNOSE_INFO_I1_TNAME,
+  OB_ALL_VIRTUAL_PLUGIN_INFO_TNAME,
   OB_ALL_VIRTUAL_SQL_AUDIT_ORA_TNAME,
   OB_ALL_VIRTUAL_SQL_AUDIT_ORA_ALL_VIRTUAL_SQL_AUDIT_I1_TNAME,
   OB_ALL_VIRTUAL_PLAN_STAT_ORA_TNAME,
@@ -9849,9 +9897,13 @@ const char* const tenant_space_table_names [] = {
   OB_V_OB_RES_MGR_SYSSTAT_TNAME,
   OB_DBA_WR_SQL_PLAN_TNAME,
   OB_DBA_OB_SPM_EVO_RESULT_TNAME,
+  OB_DBA_OB_KV_REDIS_TABLE_TNAME,
   OB_GV_OB_FUNCTION_IO_STAT_TNAME,
   OB_V_OB_FUNCTION_IO_STAT_TNAME,
   OB_DBA_OB_TEMP_FILES_TNAME,
+  OB_PROC_TNAME,
+  OB_GV_OB_PLUGINS_TNAME,
+  OB_V_OB_PLUGINS_TNAME,
   OB_DBA_SYNONYMS_TNAME,
   OB_DBA_OBJECTS_ORA_TNAME,
   OB_ALL_OBJECTS_TNAME,
@@ -10848,7 +10900,11 @@ const char* const tenant_space_table_names [] = {
   OB_ALL_PKG_TYPE_ATTR_AUX_LOB_META_TNAME,
   OB_ALL_PKG_COLL_TYPE_AUX_LOB_META_TNAME,
   OB_WR_SQL_PLAN_AUX_LOB_META_TNAME,
+  OB_ALL_KV_REDIS_TABLE_AUX_LOB_META_TNAME,
   OB_ALL_NCOMP_DLL_V2_AUX_LOB_META_TNAME,
+  OB_FT_DICT_IK_UTF8_AUX_LOB_META_TNAME,
+  OB_FT_STOPWORD_IK_UTF8_AUX_LOB_META_TNAME,
+  OB_FT_QUANTIFIER_IK_UTF8_AUX_LOB_META_TNAME,
   OB_ALL_TABLE_AUX_LOB_PIECE_TNAME,
   OB_ALL_COLUMN_AUX_LOB_PIECE_TNAME,
   OB_ALL_DDL_OPERATION_AUX_LOB_PIECE_TNAME,
@@ -11140,7 +11196,11 @@ const char* const tenant_space_table_names [] = {
   OB_ALL_PKG_TYPE_ATTR_AUX_LOB_PIECE_TNAME,
   OB_ALL_PKG_COLL_TYPE_AUX_LOB_PIECE_TNAME,
   OB_WR_SQL_PLAN_AUX_LOB_PIECE_TNAME,
-  OB_ALL_NCOMP_DLL_V2_AUX_LOB_PIECE_TNAME,  };
+  OB_ALL_KV_REDIS_TABLE_AUX_LOB_PIECE_TNAME,
+  OB_ALL_NCOMP_DLL_V2_AUX_LOB_PIECE_TNAME,
+  OB_FT_DICT_IK_UTF8_AUX_LOB_PIECE_TNAME,
+  OB_FT_STOPWORD_IK_UTF8_AUX_LOB_PIECE_TNAME,
+  OB_FT_QUANTIFIER_IK_UTF8_AUX_LOB_PIECE_TNAME,  };
 
 const uint64_t only_rs_vtables [] = {
   OB_ALL_VIRTUAL_CORE_META_TABLE_TID,
@@ -11314,6 +11374,7 @@ const uint64_t tenant_distributed_vtables [] = {
   OB_ALL_VIRTUAL_KV_CLIENT_INFO_TID,
   OB_ALL_VIRTUAL_FUNCTION_IO_STAT_TID,
   OB_ALL_VIRTUAL_TEMP_FILE_TID,
+  OB_ALL_VIRTUAL_PLUGIN_INFO_TID,
   OB_ALL_VIRTUAL_SQL_AUDIT_ORA_TID,
   OB_ALL_VIRTUAL_SQL_AUDIT_ORA_ALL_VIRTUAL_SQL_AUDIT_I1_TID,
   OB_ALL_VIRTUAL_PLAN_STAT_ORA_TID,
@@ -14234,11 +14295,43 @@ LOBMapping const lob_aux_table_mappings [] = {
   },
 
   {
+    OB_ALL_KV_REDIS_TABLE_TID,
+    OB_ALL_KV_REDIS_TABLE_AUX_LOB_META_TID,
+    OB_ALL_KV_REDIS_TABLE_AUX_LOB_PIECE_TID,
+    ObInnerTableSchema::all_kv_redis_table_aux_lob_meta_schema,
+    ObInnerTableSchema::all_kv_redis_table_aux_lob_piece_schema
+  },
+
+  {
     OB_ALL_NCOMP_DLL_V2_TID,
     OB_ALL_NCOMP_DLL_V2_AUX_LOB_META_TID,
     OB_ALL_NCOMP_DLL_V2_AUX_LOB_PIECE_TID,
     ObInnerTableSchema::all_ncomp_dll_v2_aux_lob_meta_schema,
     ObInnerTableSchema::all_ncomp_dll_v2_aux_lob_piece_schema
+  },
+
+  {
+    OB_FT_DICT_IK_UTF8_TID,
+    OB_FT_DICT_IK_UTF8_AUX_LOB_META_TID,
+    OB_FT_DICT_IK_UTF8_AUX_LOB_PIECE_TID,
+    ObInnerTableSchema::ft_dict_ik_utf8_aux_lob_meta_schema,
+    ObInnerTableSchema::ft_dict_ik_utf8_aux_lob_piece_schema
+  },
+
+  {
+    OB_FT_STOPWORD_IK_UTF8_TID,
+    OB_FT_STOPWORD_IK_UTF8_AUX_LOB_META_TID,
+    OB_FT_STOPWORD_IK_UTF8_AUX_LOB_PIECE_TID,
+    ObInnerTableSchema::ft_stopword_ik_utf8_aux_lob_meta_schema,
+    ObInnerTableSchema::ft_stopword_ik_utf8_aux_lob_piece_schema
+  },
+
+  {
+    OB_FT_QUANTIFIER_IK_UTF8_TID,
+    OB_FT_QUANTIFIER_IK_UTF8_AUX_LOB_META_TID,
+    OB_FT_QUANTIFIER_IK_UTF8_AUX_LOB_PIECE_TID,
+    ObInnerTableSchema::ft_quantifier_ik_utf8_aux_lob_meta_schema,
+    ObInnerTableSchema::ft_quantifier_ik_utf8_aux_lob_piece_schema
   },
 
 };
@@ -14278,12 +14371,12 @@ static inline int get_sys_table_lob_aux_schema(const uint64_t tid,
 }
 
 const int64_t OB_CORE_TABLE_COUNT = 4;
-const int64_t OB_SYS_TABLE_COUNT = 315;
-const int64_t OB_VIRTUAL_TABLE_COUNT = 892;
-const int64_t OB_SYS_VIEW_COUNT = 1030;
-const int64_t OB_SYS_TENANT_TABLE_COUNT = 2242;
+const int64_t OB_SYS_TABLE_COUNT = 319;
+const int64_t OB_VIRTUAL_TABLE_COUNT = 893;
+const int64_t OB_SYS_VIEW_COUNT = 1035;
+const int64_t OB_SYS_TENANT_TABLE_COUNT = 2252;
 const int64_t OB_CORE_SCHEMA_VERSION = 1;
-const int64_t OB_BOOTSTRAP_SCHEMA_VERSION = 2245;
+const int64_t OB_BOOTSTRAP_SCHEMA_VERSION = 2255;
 
 } // end namespace share
 } // end namespace oceanbase

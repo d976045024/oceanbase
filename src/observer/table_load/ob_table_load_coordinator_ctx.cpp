@@ -18,8 +18,6 @@
 #include "observer/table_load/ob_table_load_table_ctx.h"
 #include "observer/table_load/ob_table_load_task_scheduler.h"
 #include "observer/ob_server_event_history_table_operator.h"
-#include "share/ob_autoincrement_service.h"
-#include "share/sequence/ob_sequence_cache.h"
 #include "observer/table_load/ob_table_load_empty_insert_tablet_ctx_manager.h"
 
 namespace oceanbase
@@ -589,6 +587,11 @@ int ObTableLoadCoordinatorCtx::init_partition_ids(const ObIArray<ObTabletID> &ta
       } else {
         LOG_WARN("fail to search tablet ids set", KR(ret));
       }
+    }
+    if (OB_SUCC(ret) && OB_UNLIKELY(partition_ids_.count() != tablet_ids.count())) {
+      ret = OB_SCHEMA_ERROR;
+      LOG_WARN("partition ids count is not equal to tablet ids count, schema maybe change, need retry",
+                KR(ret), K(partition_ids_), K(tablet_ids));
     }
   }
   return ret;

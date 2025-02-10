@@ -13,12 +13,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_create_routine_resolver.h"
 #include "ob_create_routine_stmt.h"
-#include "sql/resolver/ob_resolver_utils.h"
-#include "pl/parser/parse_stmt_item_type.h"
 #include "pl/ob_pl_router.h"
-#include "pl/ob_pl_package.h"
-#include "pl/ob_pl_resolver.h"
-#include "share/schema/ob_trigger_info.h"
 #ifdef OB_BUILD_ORACLE_PL
 #include "pl/ob_pl_udt_object_manager.h"
 #endif
@@ -95,7 +90,7 @@ int ObCreateRoutineResolver::analyze_router_sql(obrpc::ObCreateRoutineArg *crt_r
   if (OB_SUCC(ret)) {
     pl::ObPLRouter router(routine_info, *session_info_, *schema_checker_->get_schema_guard(), *params_.sql_proxy_);
     ObString route_sql;
-    if (OB_FAIL(router.analyze(route_sql, crt_routine_arg->dependency_infos_, routine_info))) {
+    if (OB_FAIL(router.analyze(route_sql, crt_routine_arg->dependency_infos_, routine_info, crt_routine_arg))) {
       LOG_WARN("failed to analyze route sql", K(route_sql), K(ret));
     } else if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
                          *allocator_, session_info_->get_dtc_params(), route_sql))) {
@@ -244,6 +239,11 @@ int ObCreateRoutineResolver::collect_ref_obj_info(int64_t ref_obj_id, int64_t re
     OV (ObObjectType::INVALID != dep_obj_type);
     OZ (ObDependencyInfo::collect_dep_info(crt_routine_arg.dependency_infos_, dep_obj_type,
                                            ref_obj_id, ref_timestamp, dependent_type));
+    OZ (ob_add_ddl_dependency(ref_obj_id,
+                              ObSchemaObjVersion::get_schema_type(dependent_type),
+                              ref_timestamp,
+                              pl::get_tenant_id_by_object_id(ref_obj_id),
+                              crt_routine_arg));
   }
   return ret;
 }

@@ -15,12 +15,9 @@
 #include "observer/table_load/ob_table_load_merger.h"
 #include "observer/table_load/ob_table_load_data_row_handler.h"
 #include "observer/table_load/ob_table_load_index_row_handler.h"
-#include "storage/direct_load/ob_direct_load_external_multi_partition_table.h"
 #include "observer/table_load/ob_table_load_index_table_projector.h"
 #include "storage/direct_load/ob_direct_load_sstable_data_block.h"
 #include "storage/direct_load/ob_direct_load_mem_context.h"
-#include "storage/direct_load/ob_direct_load_i_table.h"
-#include "storage/direct_load/ob_direct_load_dml_row_handler.h"
 #include "storage/direct_load/ob_direct_load_sstable_scan_merge.h"
 #include "src/observer/table_load/ob_table_load_error_row_handler.h"
 
@@ -327,7 +324,7 @@ int ObTableLoadStoreTableCtx::init_row_handler()
       LOG_WARN("fail to new ObTableLoadDataRowHandler", KR(ret));
     } else if (OB_FAIL(main_row_handler->init(store_ctx_->ctx_->param_, store_ctx_->result_info_,
                                               store_ctx_->error_row_handler_,
-                                              &(store_ctx_->index_store_table_ctx_map_)))) {
+                                              &(store_ctx_->index_store_table_ctxs_)))) {
       LOG_WARN("fail to init row handler", KR(ret), KPC(store_ctx_), K(is_index_table),
                K(schema_->index_table_count_), KP(project_));
     } else {

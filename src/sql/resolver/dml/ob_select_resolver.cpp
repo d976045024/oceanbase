@@ -13,30 +13,17 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/resolver/dml/ob_del_upd_resolver.h"
-#include "lib/oblog/ob_log_module.h"
-#include "lib/json/ob_json_print_utils.h"  // for SJ
-#include "lib/time/ob_time_utility.h"
-#include "lib/profile/ob_perf_event.h"
-#include "lib/string/ob_sql_string.h"
-#include "common/sql_mode/ob_sql_mode_utils.h"
 #include "share/ob_time_utility2.h"
-#include "share/inner_table/ob_inner_table_schema.h"
-#include "sql/ob_sql_utils.h"
-#include "sql/resolver/expr/ob_raw_expr_info_extractor.h"
 #include "sql/resolver/dml/ob_aggr_expr_push_up_analyzer.h"
 #include "sql/resolver/dml/ob_group_by_checker.h"
-#include "sql/resolver/expr/ob_raw_expr.h"
-#include "sql/session/ob_sql_session_info.h"
-#include "sql/resolver/ob_resolver_utils.h"
+#include "sql/resolver/dml/ob_insert_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/optimizer/ob_optimizer_util.h"
-#include "share/object/ob_obj_cast.h"
-#include "sql/rewrite/ob_stmt_comparer.h"
 #include "sql/rewrite/ob_transform_utils.h"
-#include "common/ob_smart_call.h"
 #include "sql/engine/expr/ob_expr_regexp_context.h"
 #include "sql/engine/expr/ob_json_param_type.h"
 #include "sql/parser/ob_parser_utils.h"
+#include "sql/resolver/mv/ob_mv_printer.h"
 
 #include "sql/executor/ob_memory_tracker.h"
 namespace oceanbase
@@ -1390,7 +1377,7 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
     //查询语句中没有distinct 且 查询中不涉及子查询
     //由于fetch clause利用limit设计，同时考虑到需要支持百分比及with ties功能，因此这里分配topn需要考虑这一情形
     if (select_stmt->get_query_ctx()->get_global_hint().is_topk_specified()
-        && (1 == select_stmt->get_from_item_size())
+        && (1 == select_stmt->get_from_item_size() && !select_stmt->get_from_item(0).is_joined_)
         && (!select_stmt->is_calc_found_rows())
         && select_stmt->get_group_expr_size() > 0
         && !select_stmt->has_rollup()
@@ -1440,6 +1427,13 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
       }
     }
   }
+
+  if (OB_SUCC(ret) && session_info_->get_ddl_info().is_major_refreshing_mview()
+      && !is_substmt() && !is_in_set_query() && !is_in_exists_subquery()
+      && OB_FAIL(ObMVPrinter::set_refresh_table_scan_flag_for_mr_mv(*select_stmt))) {
+    LOG_WARN("failed to set refresh table scan flag for mr mv", K(ret));
+  }
+
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_audit_log_stmt(select_stmt))) {
       LOG_WARN("failed to check audit log stmt");
@@ -7641,6 +7635,17 @@ int ObSelectResolver::resolve_values_table_from_union(const ObIArray<int64_t> &l
     table_def->is_const_ = true;
   }
   int64_t column_cnt = 0;
+  ObInsertStmt *insert_stmt = NULL;
+  ObInsertTableInfo *insert_table_info = NULL;
+  if (OB_FAIL(ret)) {
+  } else if (NULL == upper_insert_resolver_) {
+  } else if (OB_ISNULL(insert_stmt = upper_insert_resolver_->get_insert_stmt())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null insert stmt", K(ret));
+  } else if (OB_ISNULL(insert_table_info = &insert_stmt->get_insert_table_info())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null insert table info", K(ret));
+  }
   /* first set, need resolve select_item name*/
   if (OB_SUCC(ret)) {
     const ParseNode *node = reinterpret_cast<const ParseNode *>(leaf_nodes.at(0));
@@ -7655,9 +7660,32 @@ int ObSelectResolver::resolve_values_table_from_union(const ObIArray<int64_t> &l
     } else {
       column_cnt = select_stmt->get_select_item_size();
       table_def->column_cnt_ = column_cnt;
+      if (insert_table_info != NULL && insert_table_info->values_desc_.count() != column_cnt) {
+        ret = OB_ERR_COULUMN_VALUE_NOT_MATCH;
+        LOG_WARN("column count mismatch", K(insert_table_info->values_desc_.count()),
+                                          K(select_stmt->get_select_item_size()));
+        LOG_USER_ERROR(OB_ERR_COULUMN_VALUE_NOT_MATCH, 1l);
+      }
       for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt; i++) {
         SelectItem &select_item = select_stmt->get_select_item(i);
-        if (OB_FAIL(table_def->access_exprs_.push_back(select_item.expr_))) {
+        if (insert_table_info != NULL
+            && insert_table_info->values_desc_.at(i) != NULL
+            && insert_table_info->values_desc_.at(i)->is_generated_column()
+            && select_item.expr_->get_expr_type() != T_DEFAULT) {
+          // should not insert non-default value to a generated column
+          ret = OB_NON_DEFAULT_VALUE_FOR_GENERATED_COLUMN;
+          LOG_WARN("non-default value for generated column is not allowed", K(ret));
+          ColumnItem *orig_col_item = NULL;
+          uint64_t column_id = insert_table_info->values_desc_.at(i)->get_column_id();
+          if (NULL != (orig_col_item = insert_stmt->get_column_item_by_id(insert_table_info->table_id_, column_id))
+              && orig_col_item->expr_ != NULL) {
+            const ObString &column_name = orig_col_item->expr_->get_column_name();
+            const ObString &table_name = orig_col_item->expr_->get_table_name();
+            LOG_USER_ERROR(OB_NON_DEFAULT_VALUE_FOR_GENERATED_COLUMN,
+                            column_name.length(), column_name.ptr(),
+                            table_name.length(), table_name.ptr());
+          }
+        } else if (OB_FAIL(table_def->access_exprs_.push_back(select_item.expr_))) {
           LOG_WARN("failed to push back", K(ret));
         }
       }

@@ -11,19 +11,8 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
-#include "share/schema/ob_schema_utils.h"
-#include "lib/oblog/ob_log.h"
-#include "share/schema/ob_schema_struct.h"
-#include "share/schema/ob_table_schema.h"
-#include "share/schema/ob_column_schema.h"
-#include "share/schema/ob_schema_getter_guard.h"
-#include "share/schema/ob_multi_version_schema_service.h"
-#include "share/schema/ob_server_schema_service.h"
-#include "share/ob_cluster_role.h"
-#include "share/ob_get_compat_mode.h"
+#include "ob_schema_utils.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "sql/session/ob_sql_session_info.h"
-#include "observer/ob_server_struct.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "share/ob_fts_index_builder_util.h"
 namespace oceanbase
@@ -122,6 +111,22 @@ int ObSchemaUtils::cascaded_generated_column(ObTableSchema &table_schema,
       if (OB_FAIL(ObResolverUtils::resolve_generated_column_info(col_def, allocator,
           root_expr_type, columns_names))) {
         LOG_WARN("get generated column expr failed", K(ret));
+      } else if (T_FUN_SYS_VEC_IVF_CENTER_ID == root_expr_type) {
+        column.add_column_flag(GENERATED_VEC_IVF_CENTER_ID_COLUMN_FLAG);
+      } else if (T_FUN_SYS_VEC_IVF_CENTER_VECTOR == root_expr_type ||
+                 T_FUN_SYS_VEC_IVF_PQ_CENTER_VECTOR == root_expr_type) {
+        column.add_column_flag(GENERATED_VEC_IVF_CENTER_VECTOR_COLUMN_FLAG);
+      } else if (T_FUN_SYS_VEC_IVF_FLAT_DATA_VECTOR == root_expr_type ||
+                 T_FUN_SYS_VEC_IVF_SQ8_DATA_VECTOR == root_expr_type) {
+        column.add_column_flag(GENERATED_VEC_IVF_DATA_VECTOR_COLUMN_FLAG);
+      } else if (T_FUN_SYS_VEC_IVF_META_ID == root_expr_type) {
+        column.add_column_flag(GENERATED_VEC_IVF_META_ID_COLUMN_FLAG);
+      } else if (T_FUN_SYS_VEC_IVF_META_VECTOR == root_expr_type) {
+        column.add_column_flag(GENERATED_VEC_IVF_META_VECTOR_COLUMN_FLAG);
+      } else if (T_FUN_SYS_VEC_IVF_PQ_CENTER_ID == root_expr_type) {
+        column.add_column_flag(GENERATED_VEC_IVF_PQ_CENTER_ID_COLUMN_FLAG);
+      } else if (T_FUN_SYS_VEC_IVF_PQ_CENTER_IDS == root_expr_type) {
+        column.add_column_flag(GENERATED_VEC_IVF_PQ_CENTER_IDS_COLUMN_FLAG);
       } else if (T_FUN_SYS_VEC_VID == root_expr_type) {
         column.add_column_flag(GENERATED_VEC_VID_COLUMN_FLAG);
       } else if (T_FUN_SYS_VEC_TYPE == root_expr_type) {
@@ -239,40 +244,82 @@ bool ObSchemaUtils::is_default_expr_v2_column(uint64_t flag)
 /* vector index */
 bool ObSchemaUtils::is_vec_index_column(const uint64_t flag)
 {
-  return is_vec_vid_column(flag)
-      || is_vec_type_column(flag)
-      || is_vec_vector_column(flag)
-      || is_vec_scn_column(flag)
-      || is_vec_key_column(flag)
-      || is_vec_data_column(flag);
+  return is_vec_hnsw_vid_column(flag)
+      || is_vec_hnsw_type_column(flag)
+      || is_vec_hnsw_vector_column(flag)
+      || is_vec_hnsw_scn_column(flag)
+      || is_vec_hnsw_key_column(flag)
+      || is_vec_hnsw_data_column(flag)
+      || is_vec_ivf_center_id_column(flag)
+      || is_vec_ivf_center_vector_column(flag)
+      || is_vec_ivf_data_vector_column(flag)
+      || is_vec_ivf_pq_center_id_column(flag)
+      || is_vec_ivf_pq_center_ids_column(flag)
+      || is_vec_ivf_meta_id_column(flag)
+      || is_vec_ivf_meta_vector_column(flag);
 }
 
-bool ObSchemaUtils::is_vec_vid_column(const uint64_t flag)
+bool ObSchemaUtils::is_vec_ivf_center_id_column(const uint64_t flag)
+{
+  return flag & GENERATED_VEC_IVF_CENTER_ID_COLUMN_FLAG;
+}
+
+bool ObSchemaUtils::is_vec_ivf_center_vector_column(const uint64_t flag)
+{
+  return flag & GENERATED_VEC_IVF_CENTER_VECTOR_COLUMN_FLAG;
+}
+
+bool ObSchemaUtils::is_vec_ivf_data_vector_column(const uint64_t flag)
+{
+  return flag & GENERATED_VEC_IVF_DATA_VECTOR_COLUMN_FLAG;
+}
+
+bool ObSchemaUtils::is_vec_ivf_meta_id_column(const uint64_t flag)
+{
+  return flag & GENERATED_VEC_IVF_META_ID_COLUMN_FLAG;
+}
+
+bool ObSchemaUtils::is_vec_ivf_meta_vector_column(const uint64_t flag)
+{
+  return flag & GENERATED_VEC_IVF_META_VECTOR_COLUMN_FLAG;
+}
+
+bool ObSchemaUtils::is_vec_ivf_pq_center_id_column(const uint64_t flag)
+{
+  return flag & GENERATED_VEC_IVF_PQ_CENTER_ID_COLUMN_FLAG;
+}
+
+bool ObSchemaUtils::is_vec_ivf_pq_center_ids_column(const uint64_t flag)
+{
+  return flag & GENERATED_VEC_IVF_PQ_CENTER_IDS_COLUMN_FLAG;
+}
+
+bool ObSchemaUtils::is_vec_hnsw_vid_column(const uint64_t flag)
 {
   return flag & GENERATED_VEC_VID_COLUMN_FLAG;
 }
 
-bool ObSchemaUtils::is_vec_type_column(const uint64_t flag)
+bool ObSchemaUtils::is_vec_hnsw_type_column(const uint64_t flag)
 {
   return flag & GENERATED_VEC_TYPE_COLUMN_FLAG;
 }
 
-bool ObSchemaUtils::is_vec_vector_column(const uint64_t flag)
+bool ObSchemaUtils::is_vec_hnsw_vector_column(const uint64_t flag)
 {
   return flag & GENERATED_VEC_VECTOR_COLUMN_FLAG;
 }
 
-bool ObSchemaUtils::is_vec_scn_column(const uint64_t flag)
+bool ObSchemaUtils::is_vec_hnsw_scn_column(const uint64_t flag)
 {
   return flag & GENERATED_VEC_SCN_COLUMN_FLAG;
 }
 
-bool ObSchemaUtils::is_vec_key_column(const uint64_t flag)
+bool ObSchemaUtils::is_vec_hnsw_key_column(const uint64_t flag)
 {
   return flag & GENERATED_VEC_KEY_COLUMN_FLAG;
 }
 
-bool ObSchemaUtils::is_vec_data_column(const uint64_t flag)
+bool ObSchemaUtils::is_vec_hnsw_data_column(const uint64_t flag)
 {
   return flag & GENERATED_VEC_DATA_COLUMN_FLAG;
 }

@@ -12,23 +12,12 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_optimizer_util.h"
-#include "share/schema/ob_column_schema.h"
-#include "share/schema/ob_table_schema.h"
-#include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "sql/optimizer/ob_logical_operator.h"
-#include "sql/optimizer/ob_log_plan.h"
-#include "lib/ob_name_def.h"
-#include "common/ob_smart_call.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_utils.h"
-#include "lib/utility/utility.h"
-#include "sql/optimizer/ob_opt_selectivity.h"
 #include "sql/optimizer/ob_log_table_scan.h"
-#include "share/location_cache/ob_location_service.h"
 #include "share/ob_order_perserving_encoder.h"
 #include "sql/rewrite/ob_predicate_deduce.h"
 #include "sql/optimizer/ob_log_join.h"
-#include "sql/optimizer/ob_opt_est_cost_model.h"
 
 using namespace oceanbase;
 using namespace sql;
@@ -5375,14 +5364,14 @@ int ObOptimizerUtil::check_subquery_filter(const JoinedTable *table, bool &has)
     }
   }
   if (OB_SUCC(ret) && !has && table->left_table_->is_joined_table()) {
-    if (OB_FAIL(check_subquery_filter(
-                  static_cast<const JoinedTable *>(table->left_table_), has))) {
+    if (OB_FAIL(SMART_CALL(check_subquery_filter(
+                  static_cast<const JoinedTable *>(table->left_table_), has)))) {
       LOG_WARN("failed to check subquery filter", K(ret));
     }
   }
   if (OB_SUCC(ret) && !has && table->right_table_->is_joined_table()) {
-    if (OB_FAIL(check_subquery_filter(
-                  static_cast<const JoinedTable *>(table->right_table_), has))) {
+    if (OB_FAIL(SMART_CALL(check_subquery_filter(
+                  static_cast<const JoinedTable *>(table->right_table_), has)))) {
       LOG_WARN("failed to check subquery filter", K(ret));
     }
   }
@@ -6576,6 +6565,11 @@ int ObOptimizerUtil::is_lossless_column_cast(const ObRawExpr *expr, bool &is_los
             is_lossless = (dst_type.get_scale() >= child_type.get_scale()
                            && dst_type.get_precision() >= child_type.get_precision());
           }
+        }
+      } else if (ObEnumSetTC == child_tc) {
+        if (ObStringTC == dst_tc || ObTextTC == dst_tc || ObNumberTC == dst_tc
+            || ObDoubleTC == dst_tc) {
+          is_lossless = true;
         }
       }
     } else {

@@ -12,53 +12,18 @@
 
 #define USING_LOG_PREFIX SQL_SESSION
 
-#include "sql/session/ob_sql_session_info.h"
-#include "lib/trace/ob_trace_event.h"
-#include "lib/alloc/alloc_func.h"
-#include "lib/string/ob_sql_string.h"
-#include "lib/rc/ob_rc.h"
-#include "sql/ob_sql_utils.h"
-#include "sql/ob_sql_trans_control.h"
-#include "sql/session/ob_sql_session_mgr.h"
-#include "io/easy_io.h"
+#include "ob_sql_session_info.h"
 #include "rpc/ob_rpc_define.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
-#include "observer/ob_server_struct.h"
-#include "pl/ob_pl.h"
 #include "pl/ob_pl_package.h"
-#include "pl/sys_package/ob_dbms_sql.h"
-#include "observer/mysql/ob_mysql_request_manager.h"
 #include "observer/mysql/obmp_stmt_send_piece_data.h"
-#include "observer/mysql/ob_query_driver.h"
 #include "observer/ob_server.h"
-#include "share/rc/ob_context.h"
-#include "share/rc/ob_tenant_base.h"
-#include "sql/resolver/cmd/ob_call_procedure_stmt.h"
-#include "sql/resolver/ddl/ob_ddl_stmt.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
-#include "share/schema/ob_schema_struct.h"
-#include "sql/resolver/ddl/ob_create_synonym_stmt.h"
-#include "sql/resolver/ddl/ob_drop_synonym_stmt.h"
-#include "sql/engine/expr/ob_datum_cast.h"
-#include "lib/checksum/ob_crc64.h"
-#include "lib/alloc/alloc_assist.h"
-#include "lib/string/ob_string.h"
-#include "sql/engine/px/ob_px_target_mgr.h"
-#include "lib/utility/utility.h"
-#include "lib/utility/ob_proto_trans_util.h"
 #ifdef OB_BUILD_ORACLE_PL
 #include "pl/debug/ob_pl_debugger_manager.h"
 #include "pl/sys_package/ob_pl_utl_file.h"
 #include "pl/ob_pl_profiler.h"
 #endif
-#include "lib/allocator/ob_mod_define.h"
-#include "lib/string/ob_hex_utils_base.h"
-#include "share/stat/ob_opt_stat_manager.h"
 #include "sql/plan_cache/ob_ps_cache.h"
-#include "observer/ob_sql_client_decorator.h"
 #include "ob_sess_info_verify.h"
-#include "share/schema/ob_schema_utils.h"
-#include "share/config/ob_config_helper.h"
 #include "rootserver/ob_tenant_info_loader.h"
 #ifdef OB_BUILD_AUDIT_SECURITY
 #include "sql/audit/ob_audit_log_utils.h"
@@ -215,7 +180,8 @@ ObSQLSessionInfo::ObSQLSessionInfo(const uint64_t tenant_id) :
       job_info_(nullptr),
       failover_mode_(false),
       service_name_(),
-      executing_sql_stat_record_()
+      executing_sql_stat_record_(),
+      unit_gc_min_sup_proxy_version_(0)
 {
   MEMSET(tenant_buff_, 0, sizeof(share::ObTenantSpaceFetcher));
   MEMSET(vip_buf_, 0, sizeof(vip_buf_));
@@ -262,8 +228,13 @@ int ObSQLSessionInfo::init(uint32_t sessid, uint64_t proxy_sessid,
     }
     set_client_create_time(client_create_time);
     const char *sup_proxy_min_version = "1.8.4";
+    const char *gc_min_sup_proxy_version = "4.3.2";
     min_proxy_version_ps_ = 0;
+    unit_gc_min_sup_proxy_version_ = 0;
     if (OB_FAIL(ObClusterVersion::get_version(sup_proxy_min_version, min_proxy_version_ps_))) {
+      LOG_WARN("failed to get version", K(ret));
+    } else if (OB_FAIL(ObClusterVersion::get_version(gc_min_sup_proxy_version,
+                                                     unit_gc_min_sup_proxy_version_))) {
       LOG_WARN("failed to get version", K(ret));
     } else {
       is_inited_ = true;
@@ -275,6 +246,7 @@ int ObSQLSessionInfo::init(uint32_t sessid, uint64_t proxy_sessid,
     sequence_currval_map_.clear();
     dblink_sequence_id_map_.clear();
     contexts_map_.clear();
+    sock_fd_map_.clear();
   }
   return ret;
 }
@@ -336,6 +308,7 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     package_state_map_.reuse();
     sequence_currval_map_.reuse();
     dblink_sequence_id_map_.reuse();
+    sock_fd_map_.reuse();
     curr_session_context_size_ = 0;
     pl_context_ = NULL;
     pl_can_retry_ = true;
@@ -417,6 +390,7 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
   failover_mode_ = false;
   service_name_.reset();
   executing_sql_stat_record_.reset();
+  unit_gc_min_sup_proxy_version_ = 0;
 }
 
 void ObSQLSessionInfo::clean_status()
@@ -780,6 +754,10 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
       if (is_user_session() && OB_FAIL(ObPLUtlFile::close_all(session_id))) {
         LOG_WARN("failed to close all fd in utl file", K(ret), K(session_id));
       }
+
+      if (is_user_session() && OB_FAIL(ObPLUtlTcp::close_all_conns(sock_fd_map_))) {
+        LOG_WARN("failed to close all utl_tcp connections", K(ret), K(session_id));
+      }
     }
 #endif
 
@@ -911,40 +889,32 @@ int ObSQLSessionInfo::delete_from_oracle_temp_tables(const obrpc::ObDropTableArg
         } else if (database_schema->is_in_recyclebin() || table_schema->is_in_recyclebin()) {
           LOG_DEBUG("skip table schema in recyclebin", K(*table_schema));
         } else {
-          const int64_t limit = 1000;
-          ret = sql.assign_fmt("DELETE FROM \"%.*s\".\"%.*s\" WHERE %s = %ld AND ROWNUM <= %ld",
+          ret = sql.assign_fmt("DELETE FROM \"%.*s\".\"%.*s\" WHERE %s = %ld",
                                 database_schema->get_database_name_str().length(),
                                 database_schema->get_database_name_str().ptr(),
                                 table_schema->get_table_name_str().length(),
                                 table_schema->get_table_name_str().ptr(),
-                                OB_HIDDEN_SESSION_ID_COLUMN_NAME, unique_id,
-                                limit);
+                                OB_HIDDEN_SESSION_ID_COLUMN_NAME, unique_id);
 
           if (OB_SUCC(ret)) {
             int64_t affect_rows = 0;
-            int64_t last_batch_affect_rows = limit;
             int64_t cur_time = ObTimeUtility::current_time();
             int64_t cur_timeout_backup = THIS_WORKER.get_timeout_ts();
             THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + OB_MAX_USER_SPECIFIED_TIMEOUT);
-            while (OB_SUCC(ret) && last_batch_affect_rows > 0) {
-              if (OB_FAIL(user_sql_proxy->write(tenant_id, sql.ptr(), last_batch_affect_rows))) {
-                LOG_WARN("execute sql failed", K(ret), K(sql));
-              } else {
-                affect_rows += last_batch_affect_rows;
-              }
+            if (OB_FAIL(user_sql_proxy->write(tenant_id, sql.ptr(), affect_rows))) {
+              LOG_WARN("execute sql failed", K(ret), K(sql));
             }
             if (OB_SUCC(ret)) {
               LOG_DEBUG("succeed to delete rows in oracle temporary table", K(sql), K(affect_rows));
               //delete relation temp table stats.
+              int64_t affect_rows = 0;
               if (OB_FAIL(ObOptStatManager::get_instance().delete_table_stat(tenant_id,
                                                       table_schema->get_table_id(), affect_rows))) {
                 LOG_WARN("failed to delete table stats", K(ret));
               }
-            } else {
-              LOG_WARN("failed to delete rows in oracle temporary table", K(ret), K(sql));
             }
-            LOG_INFO("delete rows in oracle temporary table", K(sql), K(affect_rows),
-                     "clean_time", ObTimeUtility::current_time() - cur_time);
+            LOG_INFO("delete rows in oracle temporary table", K(ret), K(affect_rows),
+                     "clean_time", ObTimeUtility::current_time() - cur_time, K(sql));
             THIS_WORKER.set_timeout_ts(cur_timeout_backup);
           }
         }
@@ -1147,9 +1117,7 @@ int ObSQLSessionInfo::get_session_priv_info(share::schema::ObSessionPrivInfo &se
   session_priv.db_ = get_database_name();
   session_priv.user_priv_set_ = user_priv_set_;
   session_priv.db_priv_set_ = db_priv_set_;
-  if (OB_FAIL(session_priv.enable_role_id_array_.assign(get_enable_role_array()))) {
-    LOG_WARN("failed to assign enable role id array", K(ret));
-  } else if (OB_FAIL(get_security_version(session_priv.security_version_))) {
+  if (OB_FAIL(get_security_version(session_priv.security_version_))) {
     LOG_WARN("failed to get security version", K(ret));
   }
   return ret;
@@ -1478,6 +1446,16 @@ int ObSQLSessionInfo::prepare_ps_stmt(const ObPsStmtId inner_stmt_id,
         session_info->set_ps_stmt_checksum(stmt_info->get_ps_stmt_checksum());
         session_info->set_inner_stmt_id(inner_stmt_id);
         session_info->set_num_of_returning_into(stmt_info->get_num_of_returning_into());
+        if (OB_FAIL(session_info->fill_param_types_with_null_type())) {
+          LOG_WARN("fill param types failed", K(ret),
+                                        K(stmt_info->get_ps_sql()),
+                                        K(stmt_info->get_ps_stmt_checksum()),
+                                        K(client_stmt_id),
+                                        K(inner_stmt_id),
+                                        K(get_sessid()),
+                                        K(stmt_info->get_num_of_param()),
+                                        K(stmt_info->get_num_of_returning_into()));
+        }
         LOG_TRACE("add ps session info", K(stmt_info->get_ps_sql()),
                                         K(stmt_info->get_ps_stmt_checksum()),
                                         K(client_stmt_id),
@@ -1870,7 +1848,8 @@ OB_DEF_SERIALIZE(ObSQLSessionInfo)
       gtt_trans_scope_unique_id_,
       gtt_session_scope_ids_,
       gtt_trans_scope_ids_,
-      affected_rows_);
+      affected_rows_,
+      unit_gc_min_sup_proxy_version_);
   return ret;
 }
 
@@ -1902,7 +1881,8 @@ OB_DEF_DESERIALIZE(ObSQLSessionInfo)
       gtt_trans_scope_unique_id_,
       gtt_session_scope_ids_,
       gtt_trans_scope_ids_,
-      affected_rows_);
+      affected_rows_,
+      unit_gc_min_sup_proxy_version_);
   (void)ObSQLUtils::adjust_time_by_ntp_offset(thread_data_.cur_query_start_time_);
   return ret;
 }
@@ -1935,7 +1915,8 @@ OB_DEF_SERIALIZE_SIZE(ObSQLSessionInfo)
       gtt_trans_scope_unique_id_,
       gtt_session_scope_ids_,
       gtt_trans_scope_ids_,
-      affected_rows_);
+      affected_rows_,
+      unit_gc_min_sup_proxy_version_);
   return len;
 }
 

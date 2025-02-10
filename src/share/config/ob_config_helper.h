@@ -1026,6 +1026,28 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigEnableHashRollupChecker);
 };
 
+class ObConfigPluginsLoadChecker : public ObConfigChecker
+{
+public:
+  ObConfigPluginsLoadChecker() = default;
+  virtual ~ObConfigPluginsLoadChecker() = default;
+  bool check(const ObConfigItem& t) const;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObConfigPluginsLoadChecker);
+};
+
+class ObConfigNonStdCmpLevelChecker: public ObConfigChecker
+{
+public:
+  ObConfigNonStdCmpLevelChecker()
+  {}
+  virtual ~ObConfigNonStdCmpLevelChecker()
+  {}
+  bool check(const ObConfigItem &t) const;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObConfigNonStdCmpLevelChecker);
+};
+
 class ObConfigJavaParamsChecker
   : public ObConfigChecker
 {

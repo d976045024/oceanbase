@@ -40,7 +40,7 @@
 #include "sql/engine/expr/ob_expr_extra_info_factory.h"
 #include "sql/engine/expr/ob_i_expr_extra_info.h"
 #include "lib/hash/ob_hashset.h"
-#include "lib/udt/ob_array_type.h"
+#include "lib/udt/ob_array_utils.h"
 #include "sql/session/ob_local_session_var.h"
 
 
@@ -1389,6 +1389,12 @@ public:
     ObCmpOp cmp_op = get_cmp_op(op_type);
     return get_const_cast_mode(cmp_op, right_const_param);
   }
+
+  static int eval_compare_composite(CollectionPredRes &cmp_result,
+                                    const common::ObObj &obj1,
+                                    const common::ObObj &obj2,
+                                    ObExecContext &exec_ctx,
+                                    const ObCmpOp cmp_op);
 
   OB_INLINE static common::ObCmpOp get_cmp_op(const ObExprOperatorType type) {
     /*

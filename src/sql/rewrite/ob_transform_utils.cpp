@@ -12,31 +12,12 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 
-#include "common/ob_common_utility.h"
-#include "common/ob_smart_call.h"
-#include "lib/allocator/ob_allocator.h"
-#include "lib/oblog/ob_log_module.h"
-#include "share/ob_errno.h"
-#include "share/schema/ob_table_schema.h"
-#include "sql/resolver/expr/ob_raw_expr.h"
-#include "sql/resolver/ob_resolver_utils.h"
-#include "common/ob_common_utility.h"
-#include "sql/resolver/dml/ob_select_stmt.h"
-#include "sql/resolver/dml/ob_dml_stmt.h"
-#include "sql/resolver/dml/ob_update_stmt.h"
+#include "ob_transform_utils.h"
 #include "sql/resolver/dml/ob_insert_all_stmt.h"
-#include "sql/resolver/dml/ob_insert_stmt.h"
-#include "sql/resolver/dml/ob_delete_stmt.h"
-#include "sql/resolver/dml/ob_merge_stmt.h"
-#include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "sql/rewrite/ob_transform_rule.h"
-#include "sql/rewrite/ob_stmt_comparer.h"
 #include "sql/rewrite/ob_equal_analysis.h"
-#include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/mv/ob_mv_provider.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
-#include "sql/parser/ob_parser.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
 #include "sql/rewrite/ob_expand_aggregate_utils.h"
 #include "sql/ob_sql_utils.h"
@@ -7437,13 +7418,13 @@ int ObTransformUtils::inner_copy_joined_table_expr(ObRawExprCopier &copier,
     LOG_WARN("failed to assign new conditions", K(ret));
   } else if (NULL != table->left_table_ &&
              table->left_table_->is_joined_table() &&
-             OB_FAIL(inner_copy_joined_table_expr(copier,
-                                                  static_cast<JoinedTable*>(table->left_table_)))) {
+             OB_FAIL(SMART_CALL(inner_copy_joined_table_expr(copier,
+                                                  static_cast<JoinedTable*>(table->left_table_))))) {
     LOG_WARN("failed to inner copy joined table expr", K(ret));
   } else if (NULL != table->right_table_ &&
              table->right_table_->is_joined_table() &&
-             OB_FAIL(inner_copy_joined_table_expr(copier,
-                                                  static_cast<JoinedTable*>(table->right_table_)))) {
+             OB_FAIL(SMART_CALL(inner_copy_joined_table_expr(copier,
+                                                  static_cast<JoinedTable*>(table->right_table_))))) {
     LOG_WARN("failed to inner copy joined table expr", K(ret));
   }
   return ret;
@@ -9367,9 +9348,9 @@ int ObTransformUtils::get_on_condition(TableItem *table_item,
     JoinedTable *joined_table = static_cast<JoinedTable *>(table_item);
     if (OB_FAIL(append(conditions, joined_table->get_join_conditions()))) {
       LOG_WARN("failed to append join conditions", K(ret));
-    } else if (OB_FAIL(get_on_condition(joined_table->left_table_, conditions))) {
+    } else if (OB_FAIL(SMART_CALL(get_on_condition(joined_table->left_table_, conditions)))) {
       LOG_WARN("failed to get on condition", K(ret));
-    } else if (OB_FAIL(get_on_condition(joined_table->right_table_, conditions))) {
+    } else if (OB_FAIL(SMART_CALL(get_on_condition(joined_table->right_table_, conditions)))) {
       LOG_WARN("failed to get on condition", K(ret));
     }
   }
@@ -14382,6 +14363,9 @@ int ObTransformUtils::expand_mview_table(ObTransformerCtx *ctx, ObDMLStmt *upper
       LOG_WARN("failed to push back", K(ret));
     } else if (OB_FAIL(set_expand_mview_flag(view_stmt))) {
       LOG_WARN("fail to set expand mview flag", K(ret));
+    } else if (mv_provider.is_major_refresh_mview()
+               && OB_FAIL(ObMVPrinter::set_real_time_table_scan_flag_for_mr_mv(*view_stmt))) {
+      LOG_WARN("fail to set table scan flag for major refresh mview", K(ret));
     } else if (OB_FAIL(upper_stmt->generate_view_name(*ctx->allocator_,
                                                       rt_mv_table->table_name_))) {
       LOG_WARN("failed to generate view name", K(ret));
@@ -16967,14 +16951,14 @@ int ObTransformUtils::check_left_join_chain_recursively(ObDMLStmt *stmt,
       is_valid_join_chain = false;
     } else if (!left_table->is_joined_table()) {
       is_valid_join_chain = true;
-    } else if (OB_FAIL(check_left_join_chain_recursively(stmt,
+    } else if (OB_FAIL(SMART_CALL(check_left_join_chain_recursively(stmt,
                                                         static_cast<JoinedTable*>(left_table),
                                                         target_relation_ids,
                                                         join_left_rels,
                                                         join_right_rels,
                                                         null_reject_rels,
                                                         false,
-                                                        is_valid_join_chain))) {
+                                                        is_valid_join_chain)))) {
       LOG_WARN("failed to check left join chain recursively", K(ret));
     }
   } else {

@@ -449,6 +449,20 @@ DEF_STR_WITH_CHECKER(_use_hash_rollup, OB_TENANT_PARAMETER, "AUTO",
         "DISABLED: hash rollup plan is disabled;",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
+//
+DEF_BOOL(_enable_constant_type_demotion, OB_TENANT_PARAMETER, "True",
+         "Controls whether to enable constant type demotion to optimize comparisons between "
+         "constants and columns by downgrading the constant's type to match the column's type.",
+         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_STR_WITH_CHECKER(_non_standard_comparison_level, OB_TENANT_PARAMETER, "NONE",
+        common::ObConfigNonStdCmpLevelChecker,
+        "Enable non-standard comparisons to optimize filtering by aligning constants with column "
+        "types. Currently only affects comparisons between string columns and int constants "
+        "NONE: all comparison types use standard comparison. "
+        "EQUAL: non-standard comparisons rules will applied in equal conditions. "
+        "RANGE: non-standard comparisons rules will applied in range conditions. ",
+        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
 // tenant memtable consumption related
 DEF_INT(memstore_limit_percentage, OB_CLUSTER_PARAMETER, "0", "[0, 100)",
         "used in calculating the value of MEMSTORE_LIMIT parameter: "
@@ -1570,6 +1584,9 @@ DEF_BOOL(_enable_das_keep_order, OB_TENANT_PARAMETER, "True",
 DEF_BOOL(_enable_nlj_spf_use_rich_format, OB_TENANT_PARAMETER, "True",
          "enable nlj and spf use rich format",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_BOOL(_enable_index_merge, OB_TENANT_PARAMETER, "False",
+         "enable index merge optimization",
+         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_BOOL(_enable_distributed_das_scan, OB_TENANT_PARAMETER, "True",
          "enable distributed DAS scan",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -2325,12 +2342,16 @@ ERRSIM_DEF_CAP(errsim_max_key_set_size, OB_CLUSTER_PARAMETER, "2M", "[0M,)",
         "Range: [0M,)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
+DEF_TIME(unit_gc_wait_time, OB_CLUSTER_PARAMETER, "1m", "[0, 30d]",
+         "The maximum waiting time for unit gc, "
+         "The default value is 1min. Range: [0,  30d].",
+         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_BOOL(_enable_unit_gc_wait, OB_CLUSTER_PARAMETER, "True",
          "Used to control enable or disable the unit smooth gc feature, enabled by default.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 // obkv group commit
-DEF_INT(kv_group_commit_batch_size, OB_TENANT_PARAMETER, "1", "(0,)",
+DEF_INT(kv_group_commit_batch_size, OB_TENANT_PARAMETER, "10", "(0,)",
         "Used to specify the batch size of each group commit batch in OBKV."
         " Values: 1 means sinlge operaion in each batch, equally to disable group commit."
         " When batch size is greater than 1, it means group commit is enable and used as its batch size. ",
@@ -2340,6 +2361,11 @@ DEF_STR_WITH_CHECKER(kv_group_commit_rw_mode, OB_TENANT_PARAMETER, "ALL",
         "Used to specify the read/write operation types when group commit is enable. "
         "Values: 'ALL' means enable all operations, 'READ' mean only enable read operation in group commit, 'WRITE'  means only write operations in group commit.",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
+DEF_INT(_enable_kv_group_commit_ops, OB_TENANT_PARAMETER, "10000", "[0,)",
+    "Used to control the minimum OPS threshold that triggers the group commit execution when this feature is enabled in OBKV;. Range: [0, +∞) in integer. Especially, 10000 means default value",
+    ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
 DEF_INT(ob_vector_memory_limit_percentage, OB_TENANT_PARAMETER, "0",
         "[0,100)",
         "Used to control the upper limit percentage of memory resources that the vector_index module can use. Range:[0, 100)",
@@ -2353,6 +2379,9 @@ DEF_STR_WITH_CHECKER(ob_storage_s3_url_encode_type, OB_CLUSTER_PARAMETER, "defau
                      ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_BOOL(_enable_drop_and_add_index, OB_TENANT_PARAMETER, "False",
          "it specifies that whether we can drop and add index in single statement",
+         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_BOOL(_system_trig_enabled, OB_TENANT_PARAMETER, "True",
+         "Enable or disable system trigger feature.",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_INT(_dop_of_collect_external_table_statistics, OB_TENANT_PARAMETER, "0", "[0,)",
@@ -2393,6 +2422,13 @@ DEF_INT(query_memory_limit_percentage, OB_TENANT_PARAMETER, "50", "[0,100]",
 DEF_INT(package_state_sync_max_size, OB_TENANT_PARAMETER, "8192", "[0, 16777216]",
         "the max sync size of single package state that can sync package var value. If over it, package state will not sync package var value. Range: [0, 16777216] in integer",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_STR_WITH_CHECKER(plugins_load, OB_CLUSTER_PARAMETER, "",
+                     common::ObConfigPluginsLoadChecker,
+                     "The plugins you want to load when starting observer. "
+                     "Note that plugins cannot be loaded dynamically, you should restart the observer when you change the parameter. "
+                     "Format: 'libsoname1.so:on,libsoname2.so:off' "
+                     "which `on'(default) means the plugin is enabled, `off' means the plugin is disabled(don't load), ",
+                     ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_BOOL(ob_enable_java_env, OB_CLUSTER_PARAMETER, "False",
         "Enable or disable java env for external table.",

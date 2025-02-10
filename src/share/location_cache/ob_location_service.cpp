@@ -13,11 +13,6 @@
 #define USING_LOG_PREFIX SHARE_LOCATION
 
 #include "share/location_cache/ob_location_service.h"
-#include "share/config/ob_server_config.h" // GCONF
-#include "share/inner_table/ob_inner_table_schema.h"
-#include "share/schema/ob_multi_version_schema_service.h" // ObMultiVersionSchemaService
-#include "observer/ob_server_struct.h" // GCTX
-#include "lib/utility/ob_tracepoint.h" // ERRSIM_POINT_DEF
 #include "share/ls/ob_ls_status_operator.h" // ObLSStatus
 #include "share/ob_all_server_tracer.h"
 
@@ -31,7 +26,8 @@ ObLocationService::ObLocationService()
     : inited_(false),
       stopped_(false),
       ls_location_service_(),
-      tablet_ls_service_()
+      tablet_ls_service_(),
+      vtable_location_service_()
 {
 }
 
@@ -307,9 +303,7 @@ int ObLocationService::init(
     ObLSTableOperator &ls_pt,
     schema::ObMultiVersionSchemaService &schema_service,
     common::ObMySQLProxy &sql_proxy,
-    ObIAliveServerTracer &server_tracer,
     ObRsMgr &rs_mgr,
-    obrpc::ObCommonRpcProxy &rpc_proxy,
     obrpc::ObSrvRpcProxy &srv_rpc_proxy)
 {
   int ret = OB_SUCCESS;
@@ -320,7 +314,7 @@ int ObLocationService::init(
     LOG_WARN("ls_location_service init failed", KR(ret));
   } else if (OB_FAIL(tablet_ls_service_.init(schema_service, sql_proxy, srv_rpc_proxy))) {
     LOG_WARN("tablet_ls_service init failed", KR(ret));
-  } else if (OB_FAIL(vtable_location_service_.init(server_tracer, rs_mgr, rpc_proxy))) {
+  } else if (OB_FAIL(vtable_location_service_.init(rs_mgr))) {
     LOG_WARN("vtable_location_service init failed", KR(ret));
   } else {
     inited_ = true;

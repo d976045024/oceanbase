@@ -12,15 +12,7 @@
 
 #define USING_LOG_PREFIX SQL_PC
 
-#include "sql/plan_cache/ob_plan_cache_util.h"
-#include "sql/plan_cache/ob_plan_set.h"
-#include "sql/session/ob_sql_session_info.h"
-#include "share/schema/ob_schema_getter_guard.h"
-#include "share/ob_i_tablet_scan.h"
-#include "sql/engine/ob_exec_context.h"
-#include "sql/executor/ob_task_executor.h"
-#include "sql/ob_phy_table_location.h"
-#include "sql/optimizer/ob_phy_table_location_info.h"
+#include "ob_plan_cache_util.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/optimizer/ob_direct_load_optimizer_ctx.h"
 using namespace oceanbase::share;
@@ -541,6 +533,7 @@ int ObConfigInfoInPC::load_influence_plan_config()
     enable_spf_batch_rescan_ = tenant_config->_enable_spf_batch_rescan;
     enable_var_assign_use_das_ = tenant_config->_enable_var_assign_use_das;
     enable_das_keep_order_ = tenant_config->_enable_das_keep_order;
+    enable_index_merge_ = tenant_config->_enable_index_merge;
     enable_hyperscan_regexp_engine_ =
         (0 == ObString::make_string("Hyperscan").case_compare(tenant_config->_regex_engine.str()));
     enable_parallel_das_dml_ = tenant_config->_enable_parallel_das_dml;
@@ -630,6 +623,9 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_nlj_spf_use_rich_format_))) {
     SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_nlj_spf_use_rich_format_));
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
+                               "%d", enable_index_merge_))) {
+    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_index_merge_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", enable_distributed_das_scan_))) {
     SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_distributed_das_scan_));

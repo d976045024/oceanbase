@@ -172,6 +172,7 @@
   RPC_S(PRD update_index_status, obrpc::OB_UPDATE_INDEX_TABLE_STATUS, (ObUpdateIndexStatusArg));
   RPC_S(PRD update_mview_status, obrpc::OB_UPDATE_MVIEW_TABLE_STATUS, (ObUpdateMViewStatusArg));
   RPC_S(PRD parallel_update_index_status, obrpc::OB_PARALLEL_UPDATE_INDEX_STATUS, (ObUpdateIndexStatusArg), ObParallelDDLRes);
+  RPC_S(PRD drop_lob, obrpc::OB_DROP_LOB, (ObDropLobArg));
 
   // define system admin rpc (alter system ...)
   RPC_S(PR5 root_minor_freeze, obrpc::OB_ROOT_MINOR_FREEZE, (ObRootMinorFreezeArg));
@@ -303,3 +304,5 @@
   RPC_S(PR5 reload_master_key, obrpc::OB_RELOAD_MASTER_KEY, (obrpc::ObReloadMasterKeyArg), obrpc::ObReloadMasterKeyResult);
 #endif
   RPC_S(PRD alter_user_proxy, obrpc::OB_ALTER_USER_PROXY, (ObAlterUserProxyArg), obrpc::ObAlterUserProxyRes);
+  //Rebuild Tablet
+  RPC_S(PR5 root_rebuild_tablet, obrpc::OB_ROOT_REBUILD_TABLET, (ObRebuildTabletArg));

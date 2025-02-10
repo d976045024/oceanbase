@@ -11,26 +11,12 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
-#include "lib/container/ob_iarray.h"
-#include "lib/container/ob_fixed_array.h"
-#include "share/object/ob_obj_cast.h"
 #include "share/object/ob_obj_cast_util.h"
 #include "sql/resolver/expr/ob_raw_expr_deduce_type.h"
-#include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "sql/resolver/ob_stmt.h"
-#include "sql/resolver/dml/ob_select_stmt.h"
-#include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "sql/session/ob_sql_session_info.h"
-#include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/expr/ob_expr_version.h"
-#include "sql/engine/expr/ob_expr_dll_udf.h"
-#include "sql/engine/expr/ob_datum_cast.h"
-#include "sql/engine/expr/ob_expr_case.h"
 #include "sql/engine/aggregate/ob_aggregate_processor.h"
 #include "sql/engine/expr/ob_expr_between.h"
-#include "sql/engine/expr/ob_expr_cast.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "share/ob_lob_access_utils.h"
 #include "sql/parser/ob_parser.h"
 
 namespace oceanbase
@@ -900,6 +886,8 @@ int ObRawExprDeduceType::visit(ObOpRawExpr &expr)
     result_type.set_precision(DEFAULT_PRECISION_FOR_BOOL);
     result_type.set_scale(DEFAULT_SCALE_FOR_INTEGER);
     expr.set_result_type(result_type);
+  } else if (OB_FAIL(type_demotion_.demote_type(expr))) {
+    LOG_WARN("fail to demote comparison type", K(ret), K(expr));
   } else {
     ObExprOperator *op = expr.get_op();
     if (NULL == op) {
@@ -3623,7 +3611,7 @@ int ObRawExprDeduceType::set_array_agg_result_type(ObAggFunRawExpr &expr,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("internal order expr is null", K(ret));
       } else if (order_expr->get_result_type().get_type() == ObCollectionSQLType) {
-        ret = OB_NOT_SUPPORTED;
+        ret = OB_ERR_INVALID_TYPE_FOR_OP;
         LOG_WARN("array type used for sorting isn't supported", K(ret));
       }
     }

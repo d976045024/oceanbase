@@ -12,36 +12,20 @@
 
 #define USING_LOG_PREFIX SQL
 
-#include <string.h>
-#include "lib/charset/ob_dtoa.h"
-#include "lib/utility/ob_fast_convert.h"
 #include "share/object/ob_obj_cast_util.h"
-#include "share/object/ob_obj_cast.h"
 #include "share/ob_json_access_utils.h"
 #include "sql/engine/expr/ob_datum_cast.h"
-#include "sql/engine/ob_exec_context.h"
-#include "sql/engine/expr/ob_expr_util.h"
-#include "sql/engine/ob_serializable_function.h"
-#include "lib/json_type/ob_json_tree.h"
-#include "lib/json_type/ob_json_bin.h"
-#include "lib/json_type/ob_json_base.h"
-#include "lib/json_type/ob_json_parse.h"
 #include "sql/engine/expr/ob_array_cast.h"
 #include "lib/roaringbitmap/ob_rb_utils.h"
-#include "share/ob_lob_access_utils.h"
-#include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
 #include "lib/geo/ob_geometry_cast.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
-#include "lib/udt/ob_udt_type.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "lib/xml/ob_xml_util.h"
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
-#include "pl/ob_pl.h"
-#include "pl/ob_pl_user_type.h"
 #include "lib/enumset/ob_enum_set_meta.h"
 #include "sql/engine/expr/ob_expr_type_to_str.h"
+#include "observer/omt/ob_tenant_srs.h"
 #ifdef OB_BUILD_ORACLE_PL
 #include "pl/sys_package/ob_sdo_geometry.h"
 #endif
@@ -1280,6 +1264,10 @@ static OB_INLINE int common_string_year(const ObExpr &expr,
   } else {
     if (CAST_FAIL(common_int_year(expr, tmp_int, res_datum, warning))) {
       LOG_WARN("common_int_year failed", K(ret), K(tmp_int));
+    } else if (CM_IS_DEMOTE_CAST(expr.extra_) && (OB_ERR_DATA_TRUNCATED == warning)) {
+      // demote cast can accept the string result after truncate, for example, '2020-02-30' can be
+      // treated as '2020', '2020abc' can be treated as '2020'.
+      ret = OB_SUCCESS;
     } else {
       int tmp_warning = warning;
       UNUSED(CAST_FAIL(tmp_warning));
@@ -2961,7 +2949,9 @@ template <typename IN_TYPE>
 static int common_floating_number(const IN_TYPE in_val,
                                   const ob_gcvt_arg_type arg_type,
                                   ObIAllocator &alloc,
-                                  number::ObNumber &number)
+                                  number::ObNumber &number,
+                                  ObEvalCtx &ctx,
+                                  const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   char buf[MAX_DOUBLE_STRICT_PRINT_SIZE];
@@ -2977,7 +2967,8 @@ static int common_floating_number(const IN_TYPE in_val,
   ObScale res_scale; // useless
   ObPrecision res_precision;
   if (OB_FAIL(number.from_sci_opt(str.ptr(), str.length(), alloc,
-                                  &res_precision, &res_scale))) {
+                                  &res_precision, &res_scale, true/*do_rounding*/,
+                                  CM_IS_DEMOTE_CAST(cast_mode)))) {
     LOG_WARN("fail to from str to number", K(ret), K(str));
   }
   return ret;
@@ -3090,7 +3081,7 @@ static OB_INLINE int common_double_datetime(const ObExpr &expr,
     if (OB_FAIL(helper.get_time_zone_info(tz_info_local))) {
       LOG_WARN("get time zone info failed", K(ret));
     } else {
-      if (OB_FAIL(common_floating_number(val_double, OB_GCVT_ARG_DOUBLE, tmp_alloc, number))) {
+      if (OB_FAIL(common_floating_number(val_double, OB_GCVT_ARG_DOUBLE, tmp_alloc, number, ctx, expr.extra_))) {
         LOG_WARN("cast float to number failed", K(ret), K(expr.extra_));
         if (CM_IS_WARN_ON_FAIL(expr.extra_)) {
           ret = OB_SUCCESS;
@@ -5375,7 +5366,7 @@ CAST_FUNC_NAME(float, number)
       number::ObNumber number;
       if (ObUNumberType == out_type && CAST_FAIL(numeric_negative_check(in_val))) {
         LOG_WARN("numeric_negative_check failed", K(ret), K(out_type), K(in_val));
-      } else if (OB_FAIL(common_floating_number(in_val, OB_GCVT_ARG_FLOAT, tmp_alloc, number))) {
+      } else if (OB_FAIL(common_floating_number(in_val, OB_GCVT_ARG_FLOAT, tmp_alloc, number, ctx, expr.extra_))) {
         LOG_WARN("common_float_number failed", K(ret), K(in_val));
       } else {
         res_datum.set_number(number);
@@ -5722,7 +5713,7 @@ CAST_FUNC_NAME(double, number)
       number::ObNumber number;
       if (ObUNumberType == out_type && CAST_FAIL(numeric_negative_check(in_val))) {
         LOG_WARN("numeric_negative_check failed", K(ret), K(out_type), K(in_val));
-      } else if (OB_FAIL(common_floating_number(in_val, OB_GCVT_ARG_DOUBLE, tmp_alloc, number))) {
+      } else if (OB_FAIL(common_floating_number(in_val, OB_GCVT_ARG_DOUBLE, tmp_alloc, number, ctx, expr.extra_))) {
         LOG_WARN("common_float_number failed", K(ret), K(in_val));
       } else {
         res_datum.set_number(number);
@@ -6297,6 +6288,7 @@ CAST_FUNC_NAME(mdatetime, datetime)
       int64_t out_val = in_val.datetime_;
       ObObjType in_type = expr.args_[0]->datum_meta_.type_;
       ObObjType out_type = expr.datum_meta_.type_;
+      int warning = OB_SUCCESS;
       const common::ObTimeZoneInfo *tz_info_local = NULL;
       ObSolidifiedVarsGetter helper(expr, ctx, session);
       ObDateSqlMode date_sql_mode = get_date_sql_mode(expr.extra_);
@@ -6310,7 +6302,7 @@ CAST_FUNC_NAME(mdatetime, datetime)
         } else if (ObDateTimeType == out_type) {
           ret = ObTimeConverter::mdatetime_to_datetime(in_val, out_val, date_sql_mode);
         }
-        if (OB_FAIL(ret)) {
+        if (CAST_FAIL(ret)) {
         } else {
           res_datum.set_datetime(out_val);
         }
@@ -6416,8 +6408,9 @@ CAST_FUNC_NAME(mdatetime, date)
     {
       ObMySQLDateTime in_val = child_res->get_int();
       int32_t out_val = 0;
+      int warning = OB_SUCCESS;
       ObDateSqlMode date_sql_mode = get_date_sql_mode(expr.extra_);
-      if (OB_FAIL(ObTimeConverter::mdatetime_to_date(in_val, out_val, date_sql_mode))) {
+      if (CAST_FAIL(ObTimeConverter::mdatetime_to_date(in_val, out_val, date_sql_mode))) {
         LOG_WARN("mdatetime_to_date failed", K(ret), K(in_val));
       } else {
         res_datum.set_date(out_val);
@@ -7139,6 +7132,7 @@ CAST_FUNC_NAME(mdate, datetime)
     {
       ObObjType in_type = expr.args_[0]->datum_meta_.type_;
       ObObjType out_type = expr.datum_meta_.type_;
+      int warning = OB_SUCCESS;
       const common::ObTimeZoneInfo *tz_info_local = NULL;
       ObSolidifiedVarsGetter helper(expr, ctx, session);
       ObDateSqlMode date_sql_mode = get_date_sql_mode(expr.extra_);
@@ -7148,7 +7142,7 @@ CAST_FUNC_NAME(mdate, datetime)
         ObTimeConvertCtx cvrt_ctx(tz_info_local, ObTimestampType == out_type);
         ObMySQLDate in_val = child_res->get_mysql_date();
         int64_t out_val = 0;
-        if (OB_FAIL(ObTimeConverter::mdate_to_datetime(in_val, cvrt_ctx, out_val, date_sql_mode))) {
+        if (CAST_FAIL(ObTimeConverter::mdate_to_datetime(in_val, cvrt_ctx, out_val, date_sql_mode))) {
           LOG_WARN("date_to_datetime failed", K(ret), K(in_val), K(in_type));
         } else {
           res_datum.set_datetime(out_val);
@@ -7204,8 +7198,9 @@ CAST_FUNC_NAME(mdate, date)
     {
       ObMySQLDate in_val = child_res->get_mysql_date();
       int32_t out_val = 0;
+      int warning = OB_SUCCESS;
       ObDateSqlMode date_sql_mode = get_date_sql_mode(expr.extra_);
-      if (OB_FAIL(ObTimeConverter::mdate_to_date(in_val, out_val, date_sql_mode))) {
+      if (CAST_FAIL(ObTimeConverter::mdate_to_date(in_val, out_val, date_sql_mode))) {
         LOG_WARN("date_to_date failed", K(ret), K(in_val));
       } else {
         res_datum.set_date(out_val);
@@ -11338,8 +11333,15 @@ CAST_FUNC_NAME(string, collection)
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else if (OB_FAIL(ObArrayTypeObjFactory::construct(temp_allocator, *dst_arr_type, arr_dst))) {
         LOG_WARN("construct array obj failed", K(ret), K(dst_coll_info));
+      } else if (dst_coll_info->collection_meta_->is_vector_type()) {
+        if (OB_FAIL(ObArrayCastUtils::string_cast_vector(temp_allocator, in_str, arr_dst, dst_arr_type->element_type_))) {
+          LOG_WARN("array element cast failed", K(ret), K(dst_coll_info));
+        }
       } else if (OB_FAIL(ObArrayCastUtils::string_cast(temp_allocator, in_str, arr_dst, dst_arr_type->element_type_))) {
         LOG_WARN("array element cast failed", K(ret), K(dst_coll_info));
+      }
+
+      if (OB_FAIL(ret)) {
       } else if (OB_FAIL(arr_dst->check_validity(*dst_arr_type, *arr_dst))) {
         LOG_WARN("check array validty failed", K(ret), K(dst_coll_info));
         if (ret == OB_ERR_INVALID_VECTOR_DIM) {

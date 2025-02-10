@@ -11,16 +11,11 @@
  */
 
 #define USING_LOG_PREFIX SQL
-#include "ob_external_table_access_service.h"
 
-#include "sql/resolver/ob_resolver_utils.h"
-#include "sql/engine/expr/ob_expr.h"
-#include "sql/engine/expr/ob_expr_column_conv.h"
-#include "sql/engine/basic/ob_pushdown_filter.h"
+#include "ob_external_table_access_service.h"
 #include "share/backup/ob_backup_io_adapter.h"
 #include "share/external_table/ob_external_table_utils.h"
 #include "share/ob_device_manager.h"
-#include "lib/utility/ob_macro_utils.h"
 #include "sql/engine/table/ob_parquet_table_row_iter.h"
 #ifdef OB_BUILD_CPP_ODPS
 #include "sql/engine/table/ob_odps_table_row_iter.h"
@@ -283,19 +278,33 @@ int ObExternalDataAccessDriver::get_file_list(const ObString &path,
     LOG_WARN("fail to init filter", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator, path, path_cstring, true/*c_style*/))) {
     LOG_WARN("fail to copy string", KR(ret), K(path));
-  } else if (get_storage_type() == OB_STORAGE_FILE) {
+  } else if (get_storage_type() == OB_STORAGE_FILE ||
+             get_storage_type() == OB_STORAGE_HDFS) {
     ObSEArray<ObString, 4> file_dirs;
     bool is_dir = false;
-    ObString path_without_prifix;
-    path_without_prifix = path_cstring;
-    path_without_prifix += strlen(OB_FILE_PREFIX);
 
-    OZ (FileDirectoryUtils::is_directory(path_without_prifix.ptr(), is_dir));
-    if (!is_dir) {
-      LOG_WARN("external location is not a directory", K(path_without_prifix));
+    if (get_storage_type() == OB_STORAGE_FILE) {
+      ObString path_without_prifix;
+      path_without_prifix = path_cstring;
+      path_without_prifix += strlen(OB_FILE_PREFIX);
+
+      OZ(FileDirectoryUtils::is_directory(path_without_prifix.ptr(), is_dir));
+      if (!is_dir) {
+        LOG_INFO("external location is not a directory",
+                 K(path_without_prifix));
+      } else {
+        OZ(file_dirs.push_back(path_cstring));
+      }
     } else {
-      OZ (file_dirs.push_back(path_cstring));
+      // OB_STORAGE_HDFS
+      OZ(ObBackupIoAdapter::is_directory(path_cstring, &access_info_, is_dir));
+      if (!is_dir) {
+        LOG_INFO("external location is not a directory", K(path_cstring));
+      } else {
+        OZ(file_dirs.push_back(path_cstring));
+      }
     }
+
     ObArray<int64_t> useless_size;
     for (int64_t i = 0; OB_SUCC(ret) && i < file_dirs.count(); i++) {
       ObString file_dir = file_dirs.at(i);
@@ -675,9 +684,6 @@ int ObExternalTableAccessService::table_rescan(ObVTableScanParam &param, ObNewRo
 
 int ObExternalTableAccessService::reuse_scan_iter(const bool switch_param, ObNewRowIterator *iter)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_read);
-  GET_DIAGNOSTIC_INFO->get_ash_stat().tablet_id_ = 0;
-  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(ls_id_, 0);
   UNUSED(switch_param);
   iter->reset();
   return OB_SUCCESS;
@@ -685,9 +691,6 @@ int ObExternalTableAccessService::reuse_scan_iter(const bool switch_param, ObNew
 
 int ObExternalTableAccessService::revert_scan_iter(ObNewRowIterator *iter)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_read);
-  GET_DIAGNOSTIC_INFO->get_ash_stat().tablet_id_ = 0;
-  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(ls_id_, 0);
   int ret = OB_SUCCESS;
   if (OB_ISNULL(iter)) {
     ret = OB_ERR_UNEXPECTED;

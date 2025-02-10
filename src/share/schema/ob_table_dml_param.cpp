@@ -12,8 +12,6 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_table_dml_param.h"
-#include "share/schema/ob_column_schema.h"
-#include "storage/ob_i_store.h"
 #include "share/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase
@@ -39,6 +37,7 @@ ObTableSchemaParam::ObTableSchemaParam(ObIAllocator &allocator)
     spatial_mbr_col_id_(OB_INVALID_ID),
     index_name_(),
     fts_parser_name_(),
+    fts_parser_properties_(),
     columns_(allocator),
     col_map_(allocator),
     pk_name_(),
@@ -77,6 +76,7 @@ void ObTableSchemaParam::reset()
   spatial_mbr_col_id_ = OB_INVALID_ID;
   index_name_.reset();
   fts_parser_name_.reset();
+  fts_parser_properties_.reset();
   columns_.reset();
   col_map_.clear();
   pk_name_.reset();
@@ -153,6 +153,8 @@ int ObTableSchemaParam::convert(const ObTableSchema *schema)
         LOG_WARN("invalid doc id or fulltext column id", K(ret), K(doc_id_col_id_), K(fulltext_col_id_));
       } else if (OB_FAIL(ob_write_string(allocator_, schema->get_parser_name_str(), fts_parser_name_))) {
         LOG_WARN("fail to copy fts parser name", K(ret), K(schema->get_parser_name_str()));
+      } else if (OB_FAIL(ob_write_string(allocator_, schema->get_parser_property_str(), fts_parser_properties_))) {
+        LOG_WARN("fail to copy fts parser properties", K(ret), K(schema->get_parser_property_str()));
       }
     } else if (schema->is_multivalue_index_aux()) {
       for (int64_t i = 0; OB_SUCC(ret) && i < schema->get_column_count(); ++i) {
@@ -184,10 +186,10 @@ int ObTableSchemaParam::convert(const ObTableSchema *schema)
         if (OB_ISNULL(column_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected error, column schema is nullptr", K(ret), K(i), KPC(schema));
-        } else if (column_schema->is_vec_vid_column()) {
+        } else if (column_schema->is_vec_hnsw_vid_column()) {
           vec_id_col_id_ = column_schema->get_column_id();
         } else if (schema->is_vec_delta_buffer_type()) {
-          if (column_schema->is_vec_vector_column()) {
+          if (column_schema->is_vec_hnsw_vector_column()) {
             vec_vector_col_id_ = column_schema->get_column_id();
           }
         }
@@ -480,6 +482,7 @@ int64_t ObTableSchemaParam::to_string(char *buf, const int64_t buf_len) const
        K_(fulltext_col_id),
        K_(index_name),
        K_(fts_parser_name),
+       K_(fts_parser_properties),
        K_(pk_name),
        K_(columns),
        K_(read_info),
@@ -545,6 +548,9 @@ OB_DEF_SERIALIZE(ObTableSchemaParam)
   }
   OB_UNIS_ENCODE(vec_dim_);
   OB_UNIS_ENCODE(vec_vector_col_id_);
+  if (FAILEDx(fts_parser_properties_.serialize(buf, buf_len, pos))) {
+    LOG_WARN("fail to serialize fts parser properties", K(ret));
+  }
   return ret;
 }
 
@@ -676,6 +682,14 @@ OB_DEF_DESERIALIZE(ObTableSchemaParam)
   }
   OB_UNIS_DECODE(vec_dim_);
   OB_UNIS_DECODE(vec_vector_col_id_);
+  if (OB_SUCC(ret) && pos < data_len) {
+    ObString tmp_properties;
+    if (OB_FAIL(tmp_properties.deserialize(buf, data_len, pos))) {
+      LOG_WARN("fail to deserialize fts parser properties", K(ret));
+    } else if (OB_FAIL(ob_write_string(allocator_, tmp_properties, fts_parser_properties_))) {
+      LOG_WARN("fail to copy fts parser properties", K(ret), K(tmp_properties));
+    }
+  }
   return ret;
 }
 
@@ -727,6 +741,7 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchemaParam)
   len += vec_index_param_.get_serialize_size();
   OB_UNIS_ADD_LEN(vec_dim_);
   OB_UNIS_ADD_LEN(vec_vector_col_id_);
+  len += fts_parser_properties_.get_serialize_size();
   return len;
 }
 

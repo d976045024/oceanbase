@@ -453,6 +453,26 @@ typedef common::hash::ObHashMap<uint64_t, pl::ObPLPackageState *,
                                 common::hash::NoPthreadDefendMode> ObPackageStateMap;
 typedef common::hash::ObHashMap<uint64_t, share::ObSequenceValue,
                                 common::hash::NoPthreadDefendMode> ObSequenceCurrvalMap;
+
+#define OB_UTL_TCP_DEFAULT_TX_TIMEOUT -1  //wait indefinitely
+struct ObSockFdParam
+{
+  ObSockFdParam()
+  : session_id_(OB_INVALID_ID), m_addr_info_(NULL), tx_timeout_(OB_UTL_TCP_DEFAULT_TX_TIMEOUT), collation_(CS_TYPE_INVALID)
+  {}
+
+  ObSockFdParam(const int64_t session_id, void* m_addr_info, const int32_t tx_timeout, const ObCollationType coll_type)
+  : session_id_(session_id), m_addr_info_(m_addr_info), tx_timeout_(tx_timeout), collation_(coll_type)
+  {}
+
+  int64_t  session_id_;
+  void*    m_addr_info_;
+  int32_t  tx_timeout_;
+  ObCollationType collation_;
+
+  TO_STRING_KV(K_(session_id), K_(m_addr_info), K_(collation));
+};
+typedef common::hash::ObHashMap<int64_t, ObSockFdParam, common::hash::NoPthreadDefendMode> ObSockFdMap;
 struct ObDBlinkSequenceIdKey{
   ObDBlinkSequenceIdKey()
   :dblink_id_(OB_INVALID_ID)
@@ -1285,6 +1305,7 @@ public:
   ObDBlinkSequenceIdMap  &get_dblink_sequence_id_map() { return dblink_sequence_id_map_; }
   void set_current_dblink_sequence_id(int64_t id) { current_dblink_sequence_id_ = id; }
   int64_t get_current_dblink_sequence_id() const { return current_dblink_sequence_id_; }
+  ObSockFdMap &get_sock_fd_map() { return sock_fd_map_; }
   void set_client_non_standard(bool client_non_standard) { client_non_standard_ = client_non_standard; }
   bool client_non_standard() { return client_non_standard_; }
   int set_audit_filter_name(const common::ObString &filter_name);
@@ -1546,6 +1567,52 @@ public:
     ObSQLSessionInfo::LockGuard guard(get_thread_data_lock());
     return tx_desc_ != NULL ? tx_desc_->get_tx_id().get_id() : transaction::ObTransID().get_id();
   }
+  int check_tenant_status()
+  {
+    int ret = OB_SUCCESS;
+    if (GCONF._enable_unit_gc_wait && is_obproxy_mode()
+        && proxy_version_ >= unit_gc_min_sup_proxy_version_) {
+      bool is_already_set = false;
+      if (MTL_GET_TENANT_PREPARE_GC_STATE()) {
+        if (OB_FAIL(get_session_temp_table_used(is_already_set))) {
+          SQL_SESSION_LOG(WARN, "failed to get session temp table used", K(ret));
+        } else if (!is_already_set && !is_in_transaction()) {
+          ret = OB_TENANT_NOT_IN_SERVER;
+          SQL_SESSION_LOG(INFO, "unit has been migrated", K(ret));
+        }
+      }
+    }
+    return ret;
+  }
+  int can_kill_session_immediately(bool &need_kill)
+  {
+    int ret = OB_SUCCESS;
+    need_kill = true;
+    if (GCONF._enable_unit_gc_wait && is_obproxy_mode()
+        && proxy_version_ >= unit_gc_min_sup_proxy_version_) {
+      need_kill = false;
+      bool is_already_set = false;
+      if (OB_FAIL(try_lock_query())) {
+        if (OB_UNLIKELY(OB_EAGAIN != ret)) {
+          SQL_SESSION_LOG(WARN, "fail to try lock query", K(ret));
+        } else {
+          ret = OB_SUCCESS;
+        }
+      } else {
+        // successful lock means that there is no request in the current session
+        if (OB_FAIL(get_session_temp_table_used(is_already_set))) {
+          SQL_SESSION_LOG(WARN, "failed to get session temp table used", K(ret));
+        } else if (!is_already_set && !is_in_transaction()) {
+          need_kill = true;
+        }
+        (void)unlock_query();
+      }
+    }
+    // SQL_ENG_LOG(INFO, "can kill session immediately", K(need_kill), K(is_obproxy_mode()),
+    //             K(proxy_version_), K(unit_gc_min_sup_proxy_version_), K(GCONF._enable_unit_gc_wait),
+    //             K(ret));
+    return ret;
+  }
 public:
   bool has_tx_level_temp_table() const { return tx_desc_ && tx_desc_->with_temporary_table(); }
   void set_affected_rows_is_changed(int64_t affected_rows);
@@ -1651,6 +1718,7 @@ private:
   ObPackageStateMap package_state_map_;
   ObSequenceCurrvalMap sequence_currval_map_;
   ObDBlinkSequenceIdMap dblink_sequence_id_map_;
+  ObSockFdMap sock_fd_map_;
   ObContextsMap contexts_map_;
   int64_t curr_session_context_size_;
 
@@ -1822,6 +1890,7 @@ private:
   ObServiceNameString service_name_;
   common::ObString audit_filter_name_;
   ObExecutingSqlStatRecord executing_sql_stat_record_;
+  uint64_t unit_gc_min_sup_proxy_version_;
 };
 
 

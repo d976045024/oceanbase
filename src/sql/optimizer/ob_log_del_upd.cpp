@@ -11,15 +11,10 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
-#include "sql/resolver/expr/ob_raw_expr.h"
+#include "ob_log_del_upd.h"
 #include "sql/optimizer/ob_del_upd_log_plan.h"
-#include "sql/optimizer/ob_log_del_upd.h"
-#include "sql/optimizer/ob_log_plan.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_exchange.h"
-#include "share/schema/ob_schema_getter_guard.h"
-#include "common/ob_smart_call.h"
-#include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_log_join.h"
 
 using namespace oceanbase;
@@ -1667,7 +1662,9 @@ int ObLogDelUpd::replace_dml_info_exprs(
       ObRawExpr *&expr = index_dml_info->column_old_values_exprs_.at(i);
       if (expr->is_column_ref_expr() && static_cast<ObColumnRefRawExpr *>(expr)->is_doc_id_column()) {
         // just skip, nothing to do.
-      } else if (expr->is_column_ref_expr() && static_cast<ObColumnRefRawExpr *>(expr)->is_vec_vid_column()) {
+      } else if (expr->is_column_ref_expr() && static_cast<ObColumnRefRawExpr *>(expr)->is_vec_hnsw_vid_column()) {
+        // just skip, nothing to do.
+      } else if (expr->is_column_ref_expr() && static_cast<ObColumnRefRawExpr *>(expr)->is_vec_cid_column()) {
         // just skip, nothing to do.
       } else if (OB_FAIL(replace_expr_action(replacer, index_dml_info->column_old_values_exprs_.at(i)))) {
         LOG_WARN("fail to replace expr", K(ret), K(i), K(index_dml_info->column_old_values_exprs_));

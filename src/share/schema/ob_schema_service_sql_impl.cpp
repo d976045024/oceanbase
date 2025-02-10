@@ -12,39 +12,10 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_schema_service_sql_impl.h"
-#include "lib/utility/utility.h"
-#include "lib/thread_local/ob_tsi_factory.h"
-#include "lib/mysqlclient/ob_mysql_result.h"
-#include "lib/mysqlclient/ob_mysql_connection.h"
-#include "lib/mysqlclient/ob_mysql_statement.h"
-#include "lib/mysqlclient/ob_mysql_connection_pool.h"
-#include "lib/string/ob_sql_string.h"
-#include "lib/oblog/ob_log.h"
-#include "lib/oblog/ob_log_module.h"
-#include "lib/time/ob_time_utility.h"
-#include "lib/container/ob_array_iterator.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "lib/charset/ob_dtoa.h"
-#include "share/config/ob_server_config.h"
-#include "share/inner_table/ob_inner_table_schema.h"
-#include "share/ob_dml_sql_splicer.h"
 #include "share/ob_global_stat_proxy.h"
-#include "share/system_variable/ob_system_variable.h"
 // TODO, move basic structs to ob_schema_struct.h
-#include "share/schema/ob_multi_version_schema_service.h"
-#include "share/schema/ob_schema_struct.h"
-#include "share/schema/ob_schema_utils.h"
-#include "share/schema/ob_schema_mgr.h"
 #include "share/schema/ob_schema_retrieve_utils.h"
-#include "share/ob_cluster_role.h"
-#include "share/ob_get_compat_mode.h"
 #include "observer/ob_sql_client_decorator.h"
-#include "observer/ob_server_struct.h"
-#include "share/schema/ob_server_schema_service.h"
-#include "sql/ob_sql_utils.h"
-#include "sql/session/ob_sql_session_mgr.h"
-#include "share/ob_get_compat_mode.h" // ObCompatModeGetter
-#include "common/sql_mode/ob_sql_mode_utils.h"
 
 #define COMMON_SQL              "SELECT * FROM %s"
 #define COMMON_SQL_WITH_TENANT  "SELECT * FROM %s WHERE tenant_id = %lu"
@@ -4680,6 +4651,13 @@ int ObSchemaServiceSQLImpl::fetch_all_user_info(
                                                user_keys,
                                                users_size))) {
         LOG_WARN("fetch proxy user info failed", K(ret));
+      } else if (OB_FAIL(fetch_trigger_list(schema_status,
+                                            tenant_id,
+                                            user_array.at(0).get_user_id(),
+                                            schema_version,
+                                            sql_client,
+                                            user_array.at(0)))) {
+        LOG_WARN("fetch trigger list failed", K(ret));
       }
     }
   }
@@ -7370,12 +7348,13 @@ int ObSchemaServiceSQLImpl::fetch_all_encrypt_info(
   return ret;
 }
 
+template <typename T>
 int ObSchemaServiceSQLImpl::fetch_trigger_list(const ObRefreshSchemaStatus &schema_status,
                                                const uint64_t tenant_id,
                                                const uint64_t table_id,
                                                const int64_t schema_version,
                                                ObISQLClient &sql_client,
-                                               ObTableSchema &table_schema)
+                                               T &schema)
 {
   int ret = OB_SUCCESS;
   ObMySQLResult *result = NULL;
@@ -7404,10 +7383,10 @@ int ObSchemaServiceSQLImpl::fetch_trigger_list(const ObRefreshSchemaStatus &sche
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get result", K(ret));
     } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_trigger_list(tenant_id, *result,
-                                                                    table_schema.get_trigger_list()))) {
+                                                                    schema.get_trigger_list()))) {
       LOG_WARN("failed to retrieve trigger list", K(ret));
     } else {
-      LOG_DEBUG("TRIGGER", K(table_schema.get_trigger_list()));
+      LOG_DEBUG("TRIGGER", K(schema.get_trigger_list()));
     }
   }
   return ret;

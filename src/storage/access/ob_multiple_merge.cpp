@@ -13,24 +13,9 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_multiple_merge.h"
-#include "lib/stat/ob_diagnose_info.h"
-#include "common/sql_mode/ob_sql_mode_utils.h"
-#include "common/object/ob_obj_compare.h"
-#include "storage/memtable/ob_memtable_context.h"
-#include "storage/ob_storage_util.h"
-#include "ob_vector_store.h"
 #include "ob_aggregated_store.h"
 #include "ob_aggregated_store_vec.h"
-#include "ob_dml_param.h"
-#include "lib/worker.h"
-#include "sql/engine/ob_operator.h"
-#include "storage/tx_storage/ob_ls_service.h"
-#include "storage/tx_storage/ob_ls_handle.h"
-#include "share/ob_lob_access_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "storage/ob_tenant_tablet_stat_mgr.h"
-#include "storage/column_store/ob_column_oriented_sstable.h"
-#include "storage/tablet/ob_tablet.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/concurrency_control/ob_data_validation_service.h"
@@ -1275,7 +1260,6 @@ int ObMultipleMerge::fill_virtual_columns(ObDatumRow &row)
 
 int ObMultipleMerge::check_filtered(const ObDatumRow &row, bool &filtered)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_filter_rows);
   int ret = OB_SUCCESS;
   ObSampleFilterExecutor *sample_executor = static_cast<ObSampleFilterExecutor *>(access_ctx_->get_sample_executor());
   if (nullptr != sample_executor && OB_FAIL(sample_executor->check_filtered_after_fuse(filtered))) {
@@ -1283,6 +1267,7 @@ int ObMultipleMerge::check_filtered(const ObDatumRow &row, bool &filtered)
   } else if (!filtered && NULL != access_param_->op_filters_ && !access_param_->op_filters_->empty()) {
     // Execute filter in sql static typing engine.
     // %row is already projected to output expressions for main table scan.
+    ACTIVE_SESSION_FLAG_SETTER_GUARD(in_filter_rows);
     if (OB_FAIL(access_param_->get_op()->filter_row_outside(*access_param_->op_filters_, *skip_bit_, filtered))) {
       LOG_WARN("filter row failed", K(ret));
     }

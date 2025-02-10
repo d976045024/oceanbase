@@ -11,20 +11,11 @@
  */
 
 #define USING_LOG_PREFIX SQL_REWRITE
-#include "lib/timezone/ob_time_convert.h"
-#include "lib/container/ob_array_serialization.h"
 #include "lib/geo/ob_geo_utils.h"
-#include "lib/rc/ob_rc.h"
-#include "sql/resolver/dml/ob_dml_stmt.h"
-#include "sql/rewrite/ob_query_range.h"
-#include "sql/engine/expr/ob_expr_result_type_util.h"
+#include "ob_query_range.h"
 #include "sql/engine/expr/ob_expr_like.h"
-#include "common/ob_smart_call.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "observer/omt/ob_tenant_srs.h"
-#include "sql/engine/expr/ob_geo_expr_utils.h"
-#include "sql/engine//expr/ob_datum_cast.h"
-#include "sql/engine/expr/ob_expr_json_func_helper.h"
 #include "sql/engine/expr/ob_expr_json_utils.h"
 
 //if cnd is true get full range key part which is always true
@@ -1403,7 +1394,11 @@ bool ObQueryRange::can_be_extract_range(ObItemType cmp_type,
     int ret = OB_SUCCESS;
     //由于cast对于某些时间类型的某些值域有特殊处理，导致A cast B，不一定可逆，
     //一个表达式能够抽取，需要双向都满足cast单调
-    if (OB_FAIL(ObObjCaster::is_cast_monotonic(col_type.get_type(),
+    if ((T_OP_EQ == cmp_type || T_OP_NSEQ == cmp_type) && col_type.is_enum_or_set()
+        && (calc_type.is_string_or_lob_locator_type() || calc_type.is_double()
+            || calc_type.is_number())) {
+      // do nothing
+    } else if (OB_FAIL(ObObjCaster::is_cast_monotonic(col_type.get_type(),
                                                  calc_type.get_type(),
                                                  is_cast_monotonic))) {
       LOG_WARN("check is cast monotonic failed", K(ret));

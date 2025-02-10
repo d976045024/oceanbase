@@ -60,6 +60,7 @@
 #ifdef OB_BUILD_TDE_SECURITY
 #include "rootserver/ob_rs_master_key_manager.h"
 #endif
+#include "rootserver/ob_root_rebuild_tablet.h"
 
 namespace oceanbase
 {
@@ -546,6 +547,7 @@ public:
   int drop_tablegroup(const obrpc::ObDropTablegroupArg &arg);
   int drop_index(const obrpc::ObDropIndexArg &arg, obrpc::ObDropIndexRes &res);
   int create_mlog(const obrpc::ObCreateMLogArg &arg, obrpc::ObCreateMLogRes &res);
+  int drop_lob(const obrpc::ObDropLobArg &arg);
   int rebuild_index(const obrpc::ObRebuildIndexArg &arg, obrpc::ObAlterTableRes &res);
   int rebuild_vec_index(const obrpc::ObRebuildIndexArg &arg, obrpc::ObAlterTableRes &res);
   int clone_tenant(const obrpc::ObCloneTenantArg &arg, obrpc::ObCloneTenantRes &res);
@@ -898,6 +900,8 @@ public:
   int reload_master_key(const obrpc::ObReloadMasterKeyArg &arg,
                         obrpc::ObReloadMasterKeyResult &result);
 #endif
+  int root_rebuild_tablet(const obrpc::ObRebuildTabletArg &arg);
+
 private:
 #ifdef OB_BUILD_TDE_SECURITY
   int get_root_key_from_obs_(const obrpc::ObRootKeyArg &arg, obrpc::ObRootKeyResult &result);
@@ -1118,6 +1122,9 @@ private:
   // application context
   ObTenantGlobalContextCleanTimerTask global_ctx_task_;
   ObAlterLogExternalTableTask alter_log_external_table_task_; // repeat to succeed & no retry
+  //rebuild tablet
+  ObRootRebuildTablet root_rebuild_tablet_;
+
 private:
   DISALLOW_COPY_AND_ASSIGN(ObRootService);
 };

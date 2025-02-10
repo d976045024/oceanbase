@@ -12,20 +12,12 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "lib/ob_errno.h"
-#include "lib/objectpool/ob_server_object_pool.h"
-#include "logservice/leader_coordinator/ob_failure_detector.h"
-#include "share/ob_ls_id.h"
+#include "ob_access_service.h"
 #include "storage/ob_query_iterator_factory.h"
 #include "storage/access/ob_table_scan_iterator.h"
-#include "storage/tx_storage/ob_access_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
-#include "storage/tablelock/ob_table_lock_rpc_struct.h"
-#include "storage/tablet/ob_tablet.h"
-#include "storage/access/ob_dml_param.h"
-#include "share/schema/ob_table_dml_param.h"
-#include "share/stat/ob_opt_stat_monitor_manager.h"
+#include "src/sql/engine/ob_exec_context.h"
 namespace oceanbase
 {
 using namespace common;
@@ -1046,9 +1038,6 @@ int ObAccessService::insert_row(
 
 int ObAccessService::revert_insert_iter(blocksstable::ObDatumRowIterator *iter)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_write);
-  GET_DIAGNOSTIC_INFO->get_ash_stat().tablet_id_ = 0;
-  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(ls_id_, 0);
   int ret = OB_SUCCESS;
   if (OB_LIKELY(nullptr != iter)) {
     ObQueryIteratorFactory::free_insert_dup_iter(iter);
@@ -1329,9 +1318,6 @@ int ObAccessService::get_multi_ranges_cost(
 
 int ObAccessService::reuse_scan_iter(const bool switch_param, ObNewRowIterator *iter)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_read);
-  GET_DIAGNOSTIC_INFO->get_ash_stat().tablet_id_ = 0;
-  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(ls_id_, 0);
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -1354,9 +1340,6 @@ int ObAccessService::reuse_scan_iter(const bool switch_param, ObNewRowIterator *
 
 int ObAccessService::revert_scan_iter(ObNewRowIterator *iter)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_read);
-  GET_DIAGNOSTIC_INFO->get_ash_stat().tablet_id_ = 0;
-  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(ls_id_, 0);
   int ret = OB_SUCCESS;
   NG_TRACE(S_revert_iter_begin);
   if (IS_NOT_INIT) {

@@ -93,6 +93,7 @@
 #include "storage/tablelock/ob_table_lock_common.h"       //ObTableLockPriority
 #include "storage/mview/ob_major_mv_merge_info.h"       //ObMajorMVMergeInfo
 #include "share/sequence/ob_sequence_cache.h" // ObSeqCleanCacheRes
+#include "share/rebuild_tablet/ob_rebuild_tablet_location.h"
 
 namespace oceanbase
 {
@@ -1388,6 +1389,53 @@ public:
   DECLARE_VIRTUAL_TO_STRING;
 };
 
+struct ObDropLobArg: public ObDDLArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObDropLobArg():
+      ObDDLArg(),
+      tenant_id_(common::OB_INVALID_ID),
+      session_id_(common::OB_INVALID_ID),
+      data_table_id_(common::OB_INVALID_ID),
+      aux_lob_meta_table_id_(common::OB_INVALID_ID)
+  {}
+  virtual ~ObDropLobArg() {}
+  void reset()
+  {
+    ObDDLArg::reset();
+    tenant_id_ = common::OB_INVALID_ID;
+    session_id_ = common::OB_INVALID_ID;
+    data_table_id_ = common::OB_INVALID_ID;
+    aux_lob_meta_table_id_ = common::OB_INVALID_ID;
+  }
+  bool is_valid() const
+  {
+    return common::OB_INVALID_ID != tenant_id_
+      && common::OB_INVALID_ID != data_table_id_
+      && common::OB_INVALID_ID != aux_lob_meta_table_id_;
+  }
+  int assign(const ObDropLobArg &other)
+  {
+    int ret = OB_SUCCESS;
+    if (OB_FAIL(ObDDLArg::assign(other))) {
+      SHARE_LOG(WARN, "fail to assign ddl arg", KR(ret));
+    } else {
+      tenant_id_ = other.tenant_id_;
+      session_id_ = other.session_id_;
+      data_table_id_ = other.data_table_id_;
+      aux_lob_meta_table_id_ = other.aux_lob_meta_table_id_;
+    }
+    return ret;
+  }
+public:
+  uint64_t tenant_id_;
+  uint64_t session_id_;
+  uint64_t data_table_id_;
+  uint64_t aux_lob_meta_table_id_;
+  INHERIT_TO_STRING_KV("ObDDLArg", ObDDLArg, K_(tenant_id), K_(session_id), K_(data_table_id), K_(aux_lob_meta_table_id));
+};
+
 struct ObDropIndexArg: public ObIndexArg
 {
   OB_UNIS_VERSION(1);
@@ -2398,7 +2446,8 @@ public:
         || alter_table_schema_.alter_option_bitset_.has_member(STORAGE_FORMAT_VERSION)
         || alter_table_schema_.alter_option_bitset_.has_member(PROGRESSIVE_MERGE_ROUND)
         || alter_table_schema_.alter_option_bitset_.has_member(PROGRESSIVE_MERGE_NUM)
-        || alter_table_schema_.alter_option_bitset_.has_member(ENCRYPTION);
+        || alter_table_schema_.alter_option_bitset_.has_member(ENCRYPTION)
+        || alter_table_schema_.alter_option_bitset_.has_member(ENABLE_MACRO_BLOCK_BLOOM_FILTER);
   }
   bool is_split_partition() const {
     return is_manual_split_partition() ||
@@ -4468,7 +4517,9 @@ public:
   ObCreateTabletExtraInfo() { reset(); }
   ~ObCreateTabletExtraInfo() { reset(); }
   int init(const uint64_t tenant_data_version,
+
            const bool need_create_empty_major,
+
            const bool micro_index_clustered,
            const ObTabletID &split_src_tablet_id);
   void reset();
@@ -8332,6 +8383,48 @@ public:
   DECLARE_TO_STRING;
   obrpc::ObServerList server_list_;
   int64_t replica_num_;
+};
+
+struct ObForceSetServerListResult
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObForceSetServerListResult() : ret_(OB_SUCCESS), result_list_() {}
+  ~ObForceSetServerListResult() {}
+  int init();
+  DISALLOW_COPY_AND_ASSIGN(ObForceSetServerListResult);
+
+  struct LSFailedInfo
+  {
+    OB_UNIS_VERSION(1);
+  public:
+    LSFailedInfo() : ls_id_(), failed_ret_code_(OB_SUCCESS), failed_reason_() {}
+    LSFailedInfo(const share::ObLSID &ls_id,
+                 const int failed_ret_code,
+                 const common::ObString failed_reason)
+        : ls_id_(ls_id), failed_ret_code_(failed_ret_code), failed_reason_(failed_reason) {}
+    ~LSFailedInfo() {}
+    TO_STRING_KV(K_(ls_id), K_(failed_ret_code), K_(failed_reason));
+    share::ObLSID ls_id_;
+    int failed_ret_code_;
+    common::ObString failed_reason_;
+  };
+  struct ResultInfo
+  {
+    OB_UNIS_VERSION(1);
+  public:
+    ResultInfo() : tenant_id_(OB_INVALID_TENANT_ID), successful_ls_(), failed_ls_info_() {}
+    ResultInfo(const uint64_t tenant_id) : tenant_id_(tenant_id), successful_ls_(), failed_ls_info_() {}
+    ~ResultInfo() {}
+    int add_ls_info(const share::ObLSID ls_id, const int failed_ret = OB_SUCCESS);
+    TO_STRING_KV(K_(tenant_id), K_(successful_ls), K_(failed_ls_info));
+    uint64_t tenant_id_;
+    common::ObSArray<share::ObLSID> successful_ls_;
+    common::ObSArray<LSFailedInfo> failed_ls_info_;
+  };
+  TO_STRING_KV(K_(ret), K_(result_list));
+  int ret_;
+  common::ObSArray<ResultInfo> result_list_;
 };
 
 struct ObForceCreateSysTableArg
@@ -13686,6 +13779,23 @@ private:
 private:
   uint64_t tenant_id_;
 };
+
+struct ObRebuildTabletArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  int assign(const ObRebuildTabletArg &arg);
+  bool is_valid() const;
+  ObRebuildTabletArg(): tenant_id_(common::OB_INVALID_TENANT_ID), ls_id_(), tablet_id_array_(), dest_(), src_() {}
+  TO_STRING_KV(K_(tenant_id), K_(ls_id) ,K_(tablet_id_array), K_(dest), K_(src));
+public:
+  uint64_t tenant_id_;
+  share::ObLSID ls_id_;
+  common::ObSArray<common::ObTabletID> tablet_id_array_;
+  share::ObRebuildTabletLocation dest_;
+  share::ObRebuildTabletLocation src_;
+};
+
 }//end namespace obrpc
 }//end namespace oceanbase
 #endif

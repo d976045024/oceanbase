@@ -11,9 +11,7 @@
  */
 
 #include "lib/alloc/alloc_failed_reason.h"
-#include <sys/sysinfo.h>
 #include <unistd.h>
-#include <stdio.h>
 #include "lib/allocator/ob_tc_malloc.h"
 #include "lib/allocator/ob_mod_define.h"
 #include "lib/alloc/memory_dump.h"
@@ -70,6 +68,12 @@ char *alloc_failed_msg()
   case UNKNOWN: {
       snprintf(msg, len,
                "unknown(alloc_size: %ld)",
+               afc.alloc_size_);
+      break;
+    }
+  case INVALID_ALLOC_SIZE: {
+      snprintf(msg, len,
+               "allocating 0 bytes or a negative number of bytes is not allowed(alloc_size: %ld)",
                afc.alloc_size_);
       break;
     }

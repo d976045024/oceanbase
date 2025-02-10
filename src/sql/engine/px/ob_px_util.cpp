@@ -12,26 +12,13 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "lib/net/ob_addr.h"
-#include "lib/hash/ob_hashset.h"
-#include "lib/container/ob_array.h"
+#include "ob_px_util.h"
 #include "sql/dtl/ob_dtl_channel_group.h"
-#include "sql/dtl/ob_dtl.h"
-#include "sql/engine/px/ob_px_util.h"
 #include "sql/engine/px/ob_px_scheduler.h"
 #include "sql/executor/ob_task_spliter.h"
-#include "observer/ob_server_struct.h"
-#include "sql/engine/px/exchange/ob_receive_op.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
-#include "sql/engine/px/ob_granule_iterator_op.h"
-#include "sql/engine/px/exchange/ob_px_receive_op.h"
-#include "sql/engine/expr/ob_expr.h"
 #include "share/schema/ob_part_mgr_util.h"
-#include "sql/engine/dml/ob_table_insert_op.h"
-#include "sql/session/ob_sql_session_info.h"
-#include "common/ob_smart_call.h"
 #include "storage/ob_locality_manager.h"
-#include "share/external_table/ob_external_table_file_mgr.h"
 #include "rpc/obrpc/ob_net_keepalive.h"
 #include "share/external_table/ob_external_table_utils.h"
 
@@ -1317,7 +1304,7 @@ int ObPXServerAddrUtil::build_tablet_idx_map(ObTaskExecutorCtx &task_exec_ctx,
   } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, ref_table_id, table_schema))) {
     LOG_WARN("fail get table schema", K(tenant_id), K(ref_table_id), K(ret));
   } else if (OB_ISNULL(table_schema)) {
-    ret = OB_SCHEMA_ERROR;
+    ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("fail get schema", K(ref_table_id), K(ret));
   } else if (OB_FAIL(build_tablet_idx_map(table_schema, idx_map))) {
     LOG_WARN("fail create index map", K(ret), "cnt", table_schema->get_all_part_num());
@@ -3639,7 +3626,7 @@ int ObSlaveMapUtil::build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDf
                      table_id, table_schema))) {
             LOG_WARN("faile to get table schema", K(ret), K(table_id));
           } else if (OB_ISNULL(table_schema)) {
-            ret = OB_SCHEMA_ERROR;
+            ret = OB_TABLE_NOT_EXIST;
             LOG_WARN("table schema is null", K(ret), K(table_id));
           } else if (OB_FAIL(ObPXServerAddrUtil::build_tablet_idx_map(table_schema, idx_map))) {
             LOG_WARN("fail to build tablet idx map", K(ret));

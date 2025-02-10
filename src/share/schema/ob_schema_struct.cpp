@@ -12,36 +12,13 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_schema_struct.h"
-#include "ob_schema_mgr.h"        // ObSimpleTableSchemaV2
-#include "lib/utility/ob_macro_utils.h"
-#include "lib/utility/ob_print_utils.h"
-#include "lib/utility/ob_serialization_helper.h"
-#include "lib/oblog/ob_log.h"
-#include "lib/oblog/ob_log_module.h"
-#include "lib/allocator/page_arena.h"
-#include "lib/string/ob_sql_string.h"
-#include "lib/number/ob_number_v2.h"
-#include "common/ob_zone_type.h"
-#include "share/ob_ddl_common.h"
-#include "share/schema/ob_table_schema.h"
 #include "share/ob_primary_zone_util.h"
-#include "sql/ob_sql_utils.h"
-#include "sql/session/ob_sql_session_info.h"
-#include "sql/parser/ob_parser.h"
-#include "rootserver/ob_locality_util.h"
-#include "rootserver/ob_root_utils.h"
-#include "share/schema/ob_part_mgr_util.h"
-#include "share/schema/ob_part_mgr_util.h"
-#include "observer/ob_server_struct.h"
 #include "observer/ob_server.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "sql/code_generator/ob_expr_generator_impl.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "sql/engine/expr/ob_expr_minus.h"
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
-#include "share/ob_encryption_util.h"
-#include "lib/utility/ob_print_utils.h"
 
 namespace oceanbase
 {
@@ -13896,10 +13873,11 @@ int ObRlsPolicySchema::rebuild_with_table_schema(const ObRlsPolicySchema &src_sc
   OX (tmp_column_cnt = column_cnt_);
   OX (column_cnt_ = 0);
   for (int64_t i = 0; OB_SUCC(ret) && i < tmp_column_cnt; ++i) {
+    const ObColumnSchemaV2 *column_schema = nullptr;
     if (OB_ISNULL(sec_column_array_[i])) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("rls sec column is null", KR(ret));
-    } else if (NULL == table_schema.get_column_schema(sec_column_array_[i]->get_column_id())) {
+    } else if (NULL == (column_schema = table_schema.get_column_schema(sec_column_array_[i]->get_column_id())) || column_schema->is_unused()) {
       // do nothing
     } else {
       sec_column_array_[column_cnt_++] = sec_column_array_[i];

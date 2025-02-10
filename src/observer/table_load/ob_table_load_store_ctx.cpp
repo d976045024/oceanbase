@@ -12,28 +12,14 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "observer/table_load/ob_table_load_store_ctx.h"
+#include "ob_table_load_store_ctx.h"
 #include "observer/table_load/ob_table_load_error_row_handler.h"
-#include "observer/table_load/ob_table_load_data_row_handler.h"
-#include "observer/table_load/ob_table_load_merger.h"
 #include "observer/table_load/ob_table_load_store_trans.h"
-#include "observer/table_load/ob_table_load_table_ctx.h"
 #include "observer/table_load/ob_table_load_task_scheduler.h"
 #include "observer/table_load/ob_table_load_trans_store.h"
-#include "observer/table_load/ob_table_load_utils.h"
 #include "observer/table_load/ob_table_load_store_table_ctx.h"
 #include "observer/table_load/ob_table_load_merger_manager.h"
 #include "observer/table_load/ob_table_load_open_insert_table_ctx_manager.h"
-#include "share/ob_autoincrement_service.h"
-#include "share/sequence/ob_sequence_cache.h"
-#include "sql/engine/cmd/ob_load_data_utils.h"
-#include "storage/direct_load/ob_direct_load_data_block.h"
-#include "storage/direct_load/ob_direct_load_insert_table_ctx.h"
-#include "storage/direct_load/ob_direct_load_mem_context.h"
-#include "storage/direct_load/ob_direct_load_sstable_data_block.h"
-#include "storage/direct_load/ob_direct_load_sstable_index_block.h"
-#include "storage/direct_load/ob_direct_load_sstable_scan_merge.h"
-#include "storage/direct_load/ob_direct_load_tmp_file.h"
 #include "observer/table_load/ob_table_load_pre_sorter.h"
 
 namespace oceanbase
@@ -67,6 +53,7 @@ ObTableLoadStoreCtx::ObTableLoadStoreCtx(ObTableLoadTableCtx *ctx)
     is_inited_(false)
 {
   allocator_.set_tenant_id(MTL_ID());
+  index_store_table_ctxs_.set_block_allocator(ModulePageAllocator(allocator_));
   committed_trans_store_array_.set_tenant_id(MTL_ID());
 }
 
@@ -103,9 +90,8 @@ int ObTableLoadStoreCtx::init_store_table_ctxs(
                                                        this, partition_id_array,
                                                        target_partition_id_array))) {
           LOG_WARN("fail to init ObTableLoadStoreTableCtx", KR(ret));
-        } else if (OB_FAIL(index_store_table_ctx_map_.set_refactored(
-                     simple_index_infos.at(i).table_id_, index_store_table_ctx))) {
-          LOG_WARN("fail to set index_insert_table_ctx", KR(ret));
+        } else if (OB_FAIL(index_store_table_ctxs_.push_back(index_store_table_ctx))) {
+          LOG_WARN("fail to push", KR(ret));
         }
         if (OB_FAIL(ret)) {
           if (OB_NOT_NULL(index_store_table_ctx)) {
@@ -171,9 +157,6 @@ int ObTableLoadStoreCtx::init(
   // init segment_trans_ctx_map_
   else if (OB_FAIL(segment_ctx_map_.init("TLD_SegCtxMap", ctx_->param_.tenant_id_))) {
     LOG_WARN("fail to init segment ctx map", KR(ret));
-  } else if (OB_FAIL(index_store_table_ctx_map_.create(1024, "TLD_IdxStCtxMap", "TLD_IdxStCtxMap",
-                                                       ctx_->param_.tenant_id_))) {
-    LOG_WARN("fail to create index_store_table_ctx_map", KR(ret));
   }
   // 初始化task_scheduler_
   else if (OB_ISNULL(task_scheduler_ = OB_NEWx(ObTableLoadTaskThreadPoolScheduler, (&allocator_),
@@ -268,14 +251,12 @@ void ObTableLoadStoreCtx::destroy()
     allocator_.free(error_row_handler_);
     error_row_handler_ = nullptr;
   }
-  FOREACH(it, index_store_table_ctx_map_) {
-    ObTableLoadStoreTableCtx* index_store_table_ctx = it->second;
-    if (OB_NOT_NULL(index_store_table_ctx)) {
-      index_store_table_ctx->~ObTableLoadStoreTableCtx();
-      allocator_.free(index_store_table_ctx);
-    }
+  for (int64_t i = 0; i < index_store_table_ctxs_.count(); ++i) {
+    ObTableLoadStoreTableCtx* index_store_table_ctx = index_store_table_ctxs_.at(i);
+    index_store_table_ctx->~ObTableLoadStoreTableCtx();
+    allocator_.free(index_store_table_ctx);
   }
-  index_store_table_ctx_map_.destroy();
+  index_store_table_ctxs_.reset();
   if (OB_NOT_NULL(data_store_table_ctx_)) {
     data_store_table_ctx_->~ObTableLoadStoreTableCtx();
     allocator_.free(data_store_table_ctx_);

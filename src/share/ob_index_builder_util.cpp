@@ -15,16 +15,8 @@
 #include "ob_fts_index_builder_util.h"
 #include "ob_vec_index_builder_util.h"
 
-#include "share/ob_define.h"
-#include "lib/container/ob_array_iterator.h"
-#include "lib/container/ob_array.h"
-#include "share/schema/ob_table_schema.h"
-#include "share/schema/ob_multi_version_schema_service.h"
-#include "share/ob_get_compat_mode.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
-#include "sql/resolver/ob_resolver_utils.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "sql/printer/ob_raw_expr_printer.h"
 namespace oceanbase
 {
 using namespace common;
@@ -384,26 +376,38 @@ int ObIndexBuilderUtil::set_index_table_columns(
   // no matter what index col of data table is, columns of 4 aux fts table is fixed
   if (OB_FAIL(ret)) {
   } else if (is_vec_index(arg.index_type_)) {
-    if (is_vec_rowkey_vid_type(arg.index_type_)) {
-      if (OB_FAIL(ObVecIndexBuilderUtil::set_vec_rowkey_vid_table_columns(arg, data_schema, index_schema))) {
-        LOG_WARN("fail to set vec rowkey vid table column", K(ret));
+    if (is_vec_ivf_index(arg.index_type_)) {
+      if (OB_FAIL(ObVecIndexBuilderUtil::set_vec_ivf_table_columns(arg, data_schema, index_schema))) {
+        LOG_WARN("fail to set ivf table columns", K(ret), K(arg.index_type_));
       }
-    } else if (is_vec_vid_rowkey_type(arg.index_type_)) {
-      if (OB_FAIL(ObVecIndexBuilderUtil::set_vec_vid_rowkey_table_columns(arg, data_schema, index_schema))) {
-        LOG_WARN("fail to set vec vid rowkey table column", K(ret));
+    } else if (is_vec_hnsw_index(arg.index_type_)) {
+      if (is_vec_rowkey_vid_type(arg.index_type_)) {
+        if (OB_FAIL(ObVecIndexBuilderUtil::set_vec_rowkey_vid_table_columns(arg, data_schema, index_schema))) {
+          LOG_WARN("fail to set vec rowkey vid table column", K(ret));
+        }
+      } else if (is_vec_vid_rowkey_type(arg.index_type_)) {
+        if (OB_FAIL(ObVecIndexBuilderUtil::set_vec_vid_rowkey_table_columns(arg, data_schema, index_schema))) {
+          LOG_WARN("fail to set vec vid rowkey table column", K(ret));
+        }
+      } else if (is_vec_delta_buffer_type(arg.index_type_)) {
+        if (OB_FAIL(ObVecIndexBuilderUtil::set_vec_delta_buffer_table_columns(arg, data_schema, index_schema))) {
+          LOG_WARN("fail to set vec delta buffer table column", K(ret));
+        }
+      } else if (is_vec_index_id_type(arg.index_type_)) {
+        if (OB_FAIL(ObVecIndexBuilderUtil::set_vec_index_id_table_columns(arg, data_schema, index_schema))) {
+          LOG_WARN("fail to set vec index id table column", K(ret));
+        }
+      } else if (is_vec_index_snapshot_data_type(arg.index_type_)) {
+        if (OB_FAIL(ObVecIndexBuilderUtil::set_vec_index_snapshot_data_table_columns(arg, data_schema, index_schema))) {
+          LOG_WARN("fail to set vec snapshot data table column", K(ret));
+        }
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected index type", K(ret), K(arg.index_type_));
       }
-    } else if (is_vec_delta_buffer_type(arg.index_type_)) {
-      if (OB_FAIL(ObVecIndexBuilderUtil::set_vec_delta_buffer_table_columns(arg, data_schema, index_schema))) {
-        LOG_WARN("fail to set vec vid rowkey table column", K(ret));
-      }
-    } else if (is_vec_index_id_type(arg.index_type_)) {
-      if (OB_FAIL(ObVecIndexBuilderUtil::set_vec_index_id_table_columns(arg, data_schema, index_schema))) {
-        LOG_WARN("fail to set vec vid rowkey table column", K(ret));
-      }
-    } else if (is_vec_index_snapshot_data_type(arg.index_type_)) {
-      if (OB_FAIL(ObVecIndexBuilderUtil::set_vec_index_snapshot_data_table_columns(arg, data_schema, index_schema))) {
-        LOG_WARN("fail to set vec vid rowkey table column", K(ret));
-      }
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected index type", K(ret), K(arg.index_type_));
     }
   } else if (is_fts_index(arg.index_type_) ||
              is_multivalue_index(arg.index_type_)) {

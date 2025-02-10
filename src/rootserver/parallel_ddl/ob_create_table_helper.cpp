@@ -12,23 +12,20 @@
 
 #define USING_LOG_PREFIX RS
 #include "rootserver/parallel_ddl/ob_create_table_helper.h"
-#include "rootserver/parallel_ddl/ob_index_name_checker.h"
 #include "rootserver/ob_index_builder.h"
 #include "rootserver/ob_lob_meta_builder.h"
 #include "rootserver/ob_lob_piece_builder.h"
 #include "rootserver/ob_table_creator.h"
 #include "rootserver/ob_balance_group_ls_stat_operator.h"
 #include "rootserver/freeze/ob_major_freeze_helper.h"
-#include "share/ob_rpc_struct.h"
 #include "share/ob_index_builder_util.h"
-#include "share/ob_debug_sync_point.h"
 #include "share/sequence/ob_sequence_option_builder.h" // ObSequenceOptionBuilder
 #include "share/schema/ob_table_sql_service.h"
 #include "share/schema/ob_security_audit_sql_service.h"
 #include "share/schema/ob_sequence_sql_service.h"
-#include "share/schema/ob_multi_version_schema_service.h"
 #include "share/vector_index/ob_vector_index_util.h"
 #include "sql/resolver/ob_resolver_utils.h"
+#include "share/ob_fts_index_builder_util.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -92,6 +89,7 @@ int ObCreateTableHelper::execute()
 {
   RS_TRACE(create_table_begin);
   int ret = OB_SUCCESS;
+  DEBUG_SYNC(BEFOR_EXECUTE_CREATE_TABLE_WITH_FTS_INDEX);
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(init_())) {
@@ -880,6 +878,11 @@ int ObCreateTableHelper::generate_table_schema_()
     ret = OB_NOT_SUPPORTED;
     LOG_WARN(QUEUING_MODE_NOT_COMPAT_WARN_STR, K(ret), K_(tenant_id), K(compat_version), K(arg_));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, QUEUING_MODE_NOT_COMPAT_USER_ERROR_STR);
+  } else if (compat_version < DATA_VERSION_4_3_5_1 && arg_.schema_.get_enable_macro_block_bloom_filter()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("fail to generate schema, not support enable_macro_block_bloom_filter for this version",
+             KR(ret), K(tenant_id_), K(compat_version), K(arg_));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "this version not support enable_macro_block_bloom_filter");
   } else if (OB_UNLIKELY(OB_INVALID_ID != arg_.schema_.get_table_id())) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("create table with table_id in 4.x is not supported",
@@ -1036,16 +1039,10 @@ int ObCreateTableHelper::generate_aux_table_schemas_()
     bool has_lob_table = false;
     uint64_t object_id = OB_INVALID_ID;
     if (!data_table->is_external_table()) {
-      for (int64_t i = 0; OB_SUCC(ret) && !has_lob_table && i < data_table->get_column_count(); i++) {
-        const ObColumnSchemaV2 *column = data_table->get_column_schema_by_idx(i);
-        if (OB_ISNULL(column)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("column is null", KR(ret), K(i), KPC(data_table));
-        } else if (is_lob_storage(column->get_data_type())) {
-          has_lob_table = true;
-          object_cnt += 2;
-        }
-      } // end for
+      has_lob_table = data_table->has_lob_column(true/*ignore_unused_column*/);
+      if (has_lob_table) {
+        object_cnt += 2;
+      }
     }
     if (FAILEDx(gen_object_ids_(object_cnt, id_generator))) {
       LOG_WARN("fail to gen object ids", KR(ret), K_(tenant_id), K(object_cnt));
@@ -2082,8 +2079,10 @@ int ObCreateTableHelper::create_tables_()
       ObTableSchema &new_table = new_tables_.at(i);
       const ObString *ddl_stmt_str = (0 == i) ? &arg_.ddl_stmt_str_ : NULL;
       const bool need_sync_schema_version = (new_tables_.count() - 1 == i);
-      if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id_, new_schema_version))) {
-          LOG_WARN("fail to gen new schema_version", KR(ret), K_(tenant_id));
+      if (OB_FAIL(ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(new_table, trans_))) {
+        LOG_WARN("fail to try load and lock dictionary tables", K(ret), K(tenant_id_));
+      } else if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id_, new_schema_version))) {
+        LOG_WARN("fail to gen new schema_version", KR(ret), K_(tenant_id));
       } else if (FALSE_IT(new_table.set_schema_version(new_schema_version))) {
       } else if (OB_FAIL(schema_service_impl->get_table_sql_service().create_table(
                  new_table,
