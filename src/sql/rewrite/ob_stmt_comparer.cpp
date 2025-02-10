@@ -512,7 +512,8 @@ int ObStmtComparer::check_stmt_containment(const ObDMLStmt *first,
                                            QueryRelation &relation,
                                            bool is_strict_select_list,
                                            bool need_check_select_items,
-                                           bool is_in_same_stmt)
+                                           bool is_in_same_stmt,
+                                           bool is_any_in_from_items)
 {
   int ret = OB_SUCCESS;
   int64_t first_count = 0;
@@ -543,15 +544,16 @@ int ObStmtComparer::check_stmt_containment(const ObDMLStmt *first,
     }
   } else if (first_sel->is_set_stmt() || second_sel->is_set_stmt()) {
     /*do nothing*/
-  } else if (first_sel->get_from_item_size() != second_sel->get_from_item_size()) { // TODO for the further mv rewrite, from item size may be different
-    LOG_TRACE("failed to compare, from item size not match", K(first_sel->get_from_item_size()), K(second_sel->get_from_item_size()));
   } else {
     // check from items
+    int first_from_count = first->get_from_item_size();
+    int second_from_count = second_sel->get_from_item_size(); 
     if (OB_FAIL(compute_from_items_map(first_sel,
                                        second_sel,
                                        is_in_same_stmt,
                                        map_info,
-                                       relation))) {
+                                       relation,
+                                       true))) {
       LOG_WARN("failed to compute from items map", K(ret));
     } else {
       LOG_TRACE("succeed to check from item map", K(relation), K(map_info));
@@ -571,6 +573,12 @@ int ObStmtComparer::check_stmt_containment(const ObDMLStmt *first,
         relation = QueryRelation::QUERY_EQUAL;
         map_info.is_semi_info_equal_ = true;
         LOG_TRACE("succeed to check semi info map", K(relation), K(map_info));
+      } else if (match_count == first_count) {
+        relation = QueryRelation::QUERY_RIGHT_SUBSET;
+        LOG_TRACE("succeed to check semi info map", K(relation), K(map_info));
+      } else if (match_count == second_count) {
+        relation = QueryRelation::QUERY_LEFT_SUBSET;
+        LOG_TRACE("succeed to check semi info map", K(relation), K(map_info));
       } else {
         relation = QueryRelation::QUERY_UNCOMPARABLE;
         LOG_TRACE("succeed to check semi info map", K(relation), K(map_info));
@@ -578,7 +586,7 @@ int ObStmtComparer::check_stmt_containment(const ObDMLStmt *first,
     }
 
     // check condition exprs
-    if (OB_SUCC(ret) && QueryRelation::QUERY_EQUAL == relation) {
+    if (OB_SUCC(ret) && QueryRelation::QUERY_UNCOMPARABLE != relation) {
       first_count = first_sel->get_condition_size();
       second_count = second_sel->get_condition_size();
       QueryRelation this_relation;
@@ -858,10 +866,13 @@ int ObStmtComparer::compute_from_items_map(const ObDMLStmt *first,
                                            const ObDMLStmt *second,
                                            bool is_in_same_stmt,
                                            ObStmtMapInfo &map_info,
-                                           QueryRelation &relation)
+                                           QueryRelation &relation,
+                                           bool is_any_in_from_items)
 {
   int ret = OB_SUCCESS;
   int match_count = 0;
+  int first_from_item_size = first->get_from_item_size();
+  int second_from_item_size = second->get_from_item_size();
   relation = QueryRelation::QUERY_UNCOMPARABLE;
   if (OB_ISNULL(first) || OB_ISNULL(second)) {
     ret = OB_ERR_UNEXPECTED;
@@ -905,8 +916,12 @@ int ObStmtComparer::compute_from_items_map(const ObDMLStmt *first,
     }
   }
   if (OB_FAIL(ret)) {
-  } else if (match_count != first->get_from_item_size()) {
-    relation = QueryRelation::QUERY_UNCOMPARABLE;
+  } else if (match_count != first_from_item_size || match_count != second_from_item_size) {
+    if (!is_any_in_from_items) {
+      relation = QueryRelation::QUERY_UNCOMPARABLE;
+    } else if (match_count == first_from_item_size || match_count == second_from_item_size) {
+      relation = QueryRelation::QUERY_EQUAL;
+    }
   } else {
     relation = QueryRelation::QUERY_EQUAL;
     map_info.is_table_equal_ = true;

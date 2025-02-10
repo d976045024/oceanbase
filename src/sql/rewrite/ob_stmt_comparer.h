@@ -250,7 +250,8 @@ public:
                                     QueryRelation &relation,
                                     bool is_strict_select_list = false,
                                     bool need_check_select_items = true,
-                                    bool is_in_same_stmt = true);
+                                    bool is_in_same_stmt = true,
+                                    bool is_with_any = false);
 
   static int compute_conditions_map(const ObDMLStmt *first,
                                     const ObDMLStmt *second,
@@ -274,7 +275,8 @@ public:
                                     const ObDMLStmt *second,
                                     bool is_in_same_stmt,
                                     ObStmtMapInfo &map_info,
-                                    QueryRelation &relation);
+                                    QueryRelation &relation,
+                                    bool is_with_any = false);
 
   static int is_same_from(const ObDMLStmt *first,
                           const FromItem &first_from,

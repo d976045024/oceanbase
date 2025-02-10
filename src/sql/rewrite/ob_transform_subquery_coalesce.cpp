@@ -448,6 +448,8 @@ int ObTransformSubqueryCoalesce::coalesce_same_any_all_exprs(ObDMLStmt *stmt,
                                                                   second_query_ref->get_ref_stmt(),
                                                                   map_info,
                                                                   relation,
+                                                                  true,
+                                                                  true,
                                                                   true))) {
           LOG_WARN("failed to check stmt containment", K(ret));
         } else if (!map_info.is_select_item_equal_) {
