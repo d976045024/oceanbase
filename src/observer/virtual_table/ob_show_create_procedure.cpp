@@ -149,13 +149,16 @@ int ObShowCreateProcedure::fill_row_cells(uint64_t show_procedure_id, const ObRo
         }
         case OB_APP_MIN_COLUMN_ID + 2: {
           // create_routine
+          SERVER_LOG(INFO, "print column function");
           bool sql_quote_show_create = true;
           bool ansi_quotes = false;
-          if (OB_FAIL(session_->get_sql_quote_show_create(sql_quote_show_create))) {
+          bool print_column_priv = false;
+          if (OB_FAIL(has_show_create_function_priv(proc_info, print_column_priv))) {
+          } else if (OB_FAIL(session_->get_sql_quote_show_create(sql_quote_show_create))) {
             SERVER_LOG(WARN, "failed to get sql_quote_show_create", K(ret), K(session_));
           } else if (FALSE_IT(IS_ANSI_QUOTES(session_->get_sql_mode(), ansi_quotes))) {
             // do nothing
-          } else {
+          } else if (print_column_priv) {
             ObSchemaPrinter schema_printer(*schema_guard_, false, sql_quote_show_create, ansi_quotes);
             int64_t pos = 0;
             if (OB_FAIL(schema_printer.print_routine_definition(effective_tenant_id_,
@@ -175,6 +178,11 @@ int ObShowCreateProcedure::fill_row_cells(uint64_t show_procedure_id, const ObRo
             }
             OX (cur_row_.cells_[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset())));
+          } else {
+            SERVER_LOG(INFO, "print null");
+            cur_row_.cells_[cell_idx].set_lob_value(ObLongTextType, "NULL", 4);
+            cur_row_.cells_[cell_idx].set_collation_type(
+                ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
         }
@@ -222,6 +230,74 @@ int ObShowCreateProcedure::fill_row_cells(uint64_t show_procedure_id, const ObRo
       if (OB_SUCC(ret)) {
         cell_idx++;
       }
+    }
+  }
+  return ret;
+}
+
+int ObShowCreateProcedure::has_show_create_function_priv(const ObRoutineInfo &proc_info,
+                                                         bool &print_create_function_column_priv) const {
+  int ret = OB_SUCCESS;
+  SERVER_LOG(INFO, "create func priv check");
+  if (sql::ObSchemaChecker::is_ora_priv_check()) {
+  } else {
+    SERVER_LOG(INFO, "proc info id", K(proc_info.get_owner_id()), K(proc_info.get_priv_user()), K(session_priv_.user_id_));
+    const ObString &db = session_priv_.db_;
+    const ObString &routine = proc_info.get_routine_name();
+    SERVER_LOG(INFO, "db and routine", K(db), K(routine));
+
+    // check grants
+    ObArenaAllocator alloc;
+    ObStmtNeedPrivs stmt_need_privs(alloc);
+    // ObNeedPriv execute_priv(db, routine, OB_PRIV_ROUTINE_LEVEL, OB_PRIV_EXECUTE, false);
+    // ObNeedPriv alter_routine_priv(db, routine, OB_PRIV_ROUTINE_LEVEL, OB_PRIV_ALTER_ROUTINE, false);
+    // ObNeedPriv create_routine_priv(db, routine, OB_PRIV_ROUTINE_LEVEL, OB_PRIV_CREATE_ROUTINE, false);
+    // if (OB_FAIL(stmt_need_privs.need_privs_.init(3))) {
+    //   SERVER_LOG(WARN, "fail to init need_privs", K(ret));
+    // } else if (OB_FAIL(stmt_need_privs.need_privs_.push_back(execute_priv))) {
+    //   SERVER_LOG(WARN, "Add need priv to stmt_need_privs error", K(ret));
+    // } else if (OB_FAIL(stmt_need_privs.need_privs_.push_back(alter_routine_priv))) {
+    //   SERVER_LOG(WARN, "Add need priv to stmt_need_privs error", K(ret));
+    // } else if (OB_FAIL(stmt_need_privs.need_privs_.push_back(create_routine_priv))) {
+    //   SERVER_LOG(WARN, "Add need priv to stmt_need_privs error", K(ret));
+    // } else if (OB_FAIL(schema_guard_->check_priv_or(session_priv_, enable_role_id_array_, stmt_need_privs))) {
+    //   SERVER_LOG(WARN, "No privilege show create procedure", K(ret));
+    // } else {
+    //   print_row_priv = true;
+    // }
+
+    // check routine definer
+    ObString priv_user = proc_info.get_priv_user();
+    ObString user_name = priv_user.split_on('@');
+    if (user_name == session_priv_.user_name_) {
+      print_create_function_column_priv = true;
+    }
+
+    SERVER_LOG(INFO, "routine definer", K(user_name), K(session_priv_.user_name_));
+
+    // check select priv
+    if (OB_SUCC(ret)) {
+      stmt_need_privs.reset();
+      ObNeedPriv need_priv("", "", OB_PRIV_USER_LEVEL, OB_PRIV_SELECT, false);
+      if (OB_FAIL(stmt_need_privs.need_privs_.init(1))) {
+        SERVER_LOG(WARN, "fail to init need_privs", K(ret));
+      } else if (OB_FAIL(stmt_need_privs.need_privs_.push_back(need_priv))) {
+        SERVER_LOG(WARN, "Add need priv to stmt_need_privs error", K(ret));
+      } else if (OB_FAIL(schema_guard_->check_priv(session_priv_, enable_role_id_array_, stmt_need_privs))) {
+        SERVER_LOG(WARN, "No privilege top level select", K(ret));
+      } else {
+        print_create_function_column_priv = true;
+      }
+      SERVER_LOG(INFO, "after select priv check", K(print_create_function_column_priv));
+    }
+    
+  }
+  if (OB_SUCC(ret)) {
+    SERVER_LOG(INFO, "has show create function priv ok");
+  } else {
+    SERVER_LOG(INFO, "has show create function priv failed", K(ret));
+    if (ret == OB_ERR_NO_PRIVILEGE) {
+      ret = OB_SUCCESS;
     }
   }
   return ret;
