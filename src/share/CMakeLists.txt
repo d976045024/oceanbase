@@ -51,6 +51,8 @@ ob_set_subtarget(ob_share_extra ALONE
   aggregate/aggr_extra.cpp
   aggregate/rb_build_agg.cpp
   aggregate/approx_count_distinct_synopsis.cpp
+  aggregate/sum_opnsize.cpp
+  aggregate/group_concat.cpp
 )
 
 ob_set_subtarget(ob_share ALONE
@@ -60,6 +62,8 @@ ob_set_subtarget(ob_share ALONE
   schema/ob_schema_service_sql_impl.cpp
   ob_srv_rpc_proxy.cpp
   ob_common_rpc_proxy.cpp
+  ob_ddl_args.cpp
+  ob_mview_args.cpp
 )
 
 file(GLOB SCHEMA_CPPS "inner_table/ob_inner_table_schema.*.cpp")
@@ -574,6 +578,7 @@ ob_set_subtarget(ob_share stat
   stat/ob_opt_system_stat.cpp
   stat/ob_opt_system_stat_cache.cpp
   stat/ob_min_max_estimator.cpp
+  stat/ob_column_store_refine_estimator.cpp
 )
 
 ob_set_subtarget(ob_share external_table

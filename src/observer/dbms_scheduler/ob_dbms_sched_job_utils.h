@@ -67,6 +67,35 @@ enum class ObDBMSSchedFuncType : uint64_t
   FUNCTION_TYPE_MAXNUM,
 };
 
+class ObDBMSSchedFuncSet
+{
+public:
+  static const bool SHADOW = true;
+  ObDBMSSchedFuncSet()
+  {
+#define FUNCTION_TYPE(name, args...) func_types_[static_cast<int64_t>(ObDBMSSchedFuncType::name)].set_args(args);
+#include "ob_dbms_sched_func_type.h"
+#undef FUNCTION_TYPE
+  }
+class FuncType
+{
+public:
+  FuncType() : is_shadow_(false) {}
+  void set_args(bool is_shadow = false) { is_shadow_ = is_shadow; }
+  bool is_shadow_;
+};
+  bool is_shadow(ObDBMSSchedFuncType func_type)
+  {
+    bool is_shadow = false;
+    if (func_type < ObDBMSSchedFuncType::FUNCTION_TYPE_MAXNUM) {
+      is_shadow = func_types_[static_cast<uint64_t>(func_type)].is_shadow_;
+    }
+    return is_shadow;
+  }
+  static ObDBMSSchedFuncSet instance_;
+  FuncType func_types_[static_cast<uint64_t>(ObDBMSSchedFuncType::FUNCTION_TYPE_MAXNUM)];
+};
+
 static const int64_t DEFAULT_LOG_HISTORY = 30; // days
 
 class ObDBMSSchedJobInfo
@@ -202,6 +231,7 @@ public:
   bool is_olap_async_job() const { return ObDBMSSchedFuncType::OLAP_ASYNC_JOB == get_func_type(); }
   bool is_stats_maintenance_job() const { return ObDBMSSchedFuncType::STAT_MAINTENANCE_JOB == get_func_type(); }
   bool is_user_job() const { return ObDBMSSchedFuncType::USER_JOB == get_func_type(); }
+  bool is_shadow() const { return ObDBMSSchedFuncSet::instance_.is_shadow(get_func_type()); }
 
   int deep_copy(common::ObIAllocator &allocator, const ObDBMSSchedJobInfo &other);
 
@@ -427,7 +457,8 @@ public:
   static int update_dbms_sched_job_info(common::ObISQLClient &sql_client,
                                         const ObDBMSSchedJobInfo &job_info,
                                         const ObString &job_attribute_name,
-                                        const ObObj &job_attribute_value);
+                                        const ObObj &job_attribute_value,
+                                        const bool from_pl_set_attr = false);
   /**
    * @brief  获取 JOB 信息
    * @param [in] tenant_id  - 租户id

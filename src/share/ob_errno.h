@@ -3956,6 +3956,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_BACKUP_MISSING_MVIEW_DEP_TABLET_SSTABLE__USER_ERROR_MSG "Backup missing mview dependent tablet sstable, sstable maybe recycled"
 #define OB_ERR_DUPLICATE_INDEX__USER_ERROR_MSG "Duplicate index \'%s\' defined on the table \'%s.%s\'"
 #define OB_NO_LS_REPLICA_CAN_DO_BACKUP__USER_ERROR_MSG "No suitable replica found to perform backup"
+#define OB_INVALID_KMS_DEST__USER_ERROR_MSG "%s is not a valid uri"
 #define OB_ERR_RESIZE_FILE_TO_SMALLER__USER_ERROR_MSG "Extend ssblock file to smaller is not allowed"
 #define OB_MARK_BLOCK_INFO_TIMEOUT__USER_ERROR_MSG "Mark blocks timeout(5s) in auto extend process when alloc block fail"
 #define OB_NOT_READY_TO_EXTEND_FILE__USER_ERROR_MSG "Auto extend param is not ready to start extending file"
@@ -4217,7 +4218,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_MVIEW_NOT_EXIST__USER_ERROR_MSG "materialized view `%s`.`%s` does not exist"
 #define OB_ERR_MVIEW_EXIST__USER_ERROR_MSG "materialized view `%s`.`%s` already exists"
 #define OB_ERR_MLOG_IS_YOUNGER__USER_ERROR_MSG "materialized view log on `%s`.`%s` younger than last refresh"
-#define OB_ERR_MVIEW_CAN_NOT_FAST_REFRESH__USER_ERROR_MSG "cannot fast refresh materialized view `%s`.`%s`"
+#define OB_ERR_MVIEW_CAN_NOT_FAST_REFRESH__USER_ERROR_MSG "cannot fast refresh materialized view %s: %s"
 #define OB_ERR_MVIEW_NEVER_REFRESH__USER_ERROR_MSG "cannot explicitly refresh a NEVER REFRESH materialized view (`%s`)"
 #define OB_ERR_CLIENT_LOCAL_FILES_DISABLED__USER_ERROR_MSG "Loading local data is disabled; this must be enabled on both the client and server sides"
 #define OB_ERR_OUT_PARAM_NOT_BIND_VAR__USER_ERROR_MSG "output parameter not a bind variable"
@@ -4240,7 +4241,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_EVENT_RECURSION_FORBIDDEN__USER_ERROR_MSG "Recursion of EVENT DDL statements is forbidden when body is present"
 #define OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR__USER_ERROR_MSG "Table has no partition for value"
 #define OB_ERR_INVALID_CHARACTER__USER_ERROR_MSG "invalid character"
-#define OB_ERR_MVIEW_CAN_NOT_ON_QUERY_COMPUTE__USER_ERROR_MSG "cannot ENABLE ON QUERY COMPUTATION for the materialized view `%s`.`%s`"
+#define OB_ERR_MVIEW_CAN_NOT_ON_QUERY_COMPUTE__USER_ERROR_MSG "cannot ENABLE ON QUERY COMPUTATION for the materialized view %s: %s"
 #define OB_ERR_CURSOR_ATTR_APPLY__USER_ERROR_MSG "cursor attribute may not be applied to non-cursor %.*s"
 #define OB_UTL_TCP_BUFFER_TOO_SMALL__USER_ERROR_MSG "buffer too small"
 #define OB_UTL_TCP_END_OF_INPUT__USER_ERROR_MSG "end-of-input reached"
@@ -8341,6 +8342,8 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_DUPLICATE_INDEX__OBE_USER_ERROR_MSG "OBE-00600: internal error code, arguments: -9137, Duplicate index \'%s\' defined on the table \'%s.%s\'"
 #define OB_NO_LS_REPLICA_CAN_DO_BACKUP__ORA_USER_ERROR_MSG "ORA-00600: internal error code, arguments: -9138, No suitable replica found to perform backup"
 #define OB_NO_LS_REPLICA_CAN_DO_BACKUP__OBE_USER_ERROR_MSG "OBE-00600: internal error code, arguments: -9138, No suitable replica found to perform backup"
+#define OB_INVALID_KMS_DEST__ORA_USER_ERROR_MSG "ORA-00600: internal error code, arguments: -9139, %s is not a valid uri"
+#define OB_INVALID_KMS_DEST__OBE_USER_ERROR_MSG "OBE-00600: internal error code, arguments: -9139, %s is not a valid uri"
 #define OB_ERR_RESIZE_FILE_TO_SMALLER__ORA_USER_ERROR_MSG "ORA-00600: internal error code, arguments: -9200, Extend ssblock file to smaller is not allowed"
 #define OB_ERR_RESIZE_FILE_TO_SMALLER__OBE_USER_ERROR_MSG "OBE-00600: internal error code, arguments: -9200, Extend ssblock file to smaller is not allowed"
 #define OB_MARK_BLOCK_INFO_TIMEOUT__ORA_USER_ERROR_MSG "ORA-00600: internal error code, arguments: -9201, Mark blocks timeout(5s) in auto extend process when alloc block fail"
@@ -8863,8 +8866,8 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_MVIEW_EXIST__OBE_USER_ERROR_MSG "OBE-12006: materialized view %s.%s already exists"
 #define OB_ERR_MLOG_IS_YOUNGER__ORA_USER_ERROR_MSG "ORA-12034: materialized view log on %s.%s younger than last refresh"
 #define OB_ERR_MLOG_IS_YOUNGER__OBE_USER_ERROR_MSG "OBE-12034: materialized view log on %s.%s younger than last refresh"
-#define OB_ERR_MVIEW_CAN_NOT_FAST_REFRESH__ORA_USER_ERROR_MSG "ORA-12052: cannot fast refresh materialized view %s.%s"
-#define OB_ERR_MVIEW_CAN_NOT_FAST_REFRESH__OBE_USER_ERROR_MSG "OBE-12052: cannot fast refresh materialized view %s.%s"
+#define OB_ERR_MVIEW_CAN_NOT_FAST_REFRESH__ORA_USER_ERROR_MSG "ORA-12052: cannot fast refresh materialized view %s: %s"
+#define OB_ERR_MVIEW_CAN_NOT_FAST_REFRESH__OBE_USER_ERROR_MSG "OBE-12052: cannot fast refresh materialized view %s: %s"
 #define OB_ERR_MVIEW_NEVER_REFRESH__ORA_USER_ERROR_MSG "ORA-23538: cannot explicitly refresh a NEVER REFRESH materialized view (%s)"
 #define OB_ERR_MVIEW_NEVER_REFRESH__OBE_USER_ERROR_MSG "OBE-23538: cannot explicitly refresh a NEVER REFRESH materialized view (%s)"
 #define OB_ERR_CLIENT_LOCAL_FILES_DISABLED__ORA_USER_ERROR_MSG "ORA-00600: internal error code, arguments: -9762, Loading local data is disabled; this must be enabled on both the client and server sides"
@@ -8909,8 +8912,8 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR__OBE_USER_ERROR_MSG "OBE-14400: inserted partition key does not map to any partition"
 #define OB_ERR_INVALID_CHARACTER__ORA_USER_ERROR_MSG "ORA-00911: invalid character"
 #define OB_ERR_INVALID_CHARACTER__OBE_USER_ERROR_MSG "OBE-00911: invalid character"
-#define OB_ERR_MVIEW_CAN_NOT_ON_QUERY_COMPUTE__ORA_USER_ERROR_MSG "ORA-32361: cannot ENABLE ON QUERY COMPUTATION for the materialized view %s.%s"
-#define OB_ERR_MVIEW_CAN_NOT_ON_QUERY_COMPUTE__OBE_USER_ERROR_MSG "OBE-32361: cannot ENABLE ON QUERY COMPUTATION for the materialized view %s.%s"
+#define OB_ERR_MVIEW_CAN_NOT_ON_QUERY_COMPUTE__ORA_USER_ERROR_MSG "ORA-32361: cannot ENABLE ON QUERY COMPUTATION for the materialized view %s: %s"
+#define OB_ERR_MVIEW_CAN_NOT_ON_QUERY_COMPUTE__OBE_USER_ERROR_MSG "OBE-32361: cannot ENABLE ON QUERY COMPUTATION for the materialized view %s: %s"
 #define OB_ERR_CURSOR_ATTR_APPLY__ORA_USER_ERROR_MSG "PLS-00324: cursor attribute may not be applied to non-cursor %.*s"
 #define OB_ERR_CURSOR_ATTR_APPLY__OBE_USER_ERROR_MSG "PLS-00324: cursor attribute may not be applied to non-cursor %.*s"
 #define OB_UTL_TCP_BUFFER_TOO_SMALL__ORA_USER_ERROR_MSG "ORA-29258: buffer too small"
@@ -9180,7 +9183,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_INVALID_DATE_MSG_FMT_V2__ORA_USER_ERROR_MSG "ORA-01861: Incorrect datetime value for column '%.*s' at row %ld"
 #define OB_ERR_INVALID_DATE_MSG_FMT_V2__OBE_USER_ERROR_MSG "OBE-01861: Incorrect datetime value for column '%.*s' at row %ld"
 
-extern int g_all_ob_errnos[2399];
+extern int g_all_ob_errnos[2400];
 
   const char *ob_error_name(const int oberr);
   const char* ob_error_cause(const int oberr);

@@ -94,6 +94,7 @@ int ObDBMSSchedJobExecutor::init_session(
     user_info->get_user_name(), user_info->get_host_name_str(), user_info->get_user_id()));
   OX (session.set_priv_user_id(user_info->get_user_id()));
   OX (session.set_user_priv_set(user_info->get_priv_set()));
+  OX (session.init_use_rich_format());
   OZ (schema_guard.get_db_priv_set(tenant_id, user_info->get_user_id(), database_name, db_priv_set));
   OX (session.set_db_priv_set(db_priv_set));
   OX (session.get_enable_role_array().reuse());
@@ -102,7 +103,11 @@ int ObDBMSSchedJobExecutor::init_session(
       OZ (session.get_enable_role_array().push_back(user_info->get_role_id_array().at(i)));
     }
   }
-  OX (session.set_shadow(true));
+  if (job_info.is_shadow()) {
+    OX (session.set_shadow(true));
+  } else {
+    OX (session.set_shadow(false));
+  }
   if (OB_SUCC(ret)) {
     if (job_info.is_mview_job()) {
       // set larger timeout for mview scheduler jobs

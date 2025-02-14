@@ -4529,7 +4529,7 @@ int ObBasicSessionInfo::calc_need_serialize_vars(ObIArray<ObSysVarClassType> &sy
     ObSessionValMap::VarNameValMap::const_iterator iter = user_var_val_map_.get_val_map().begin();
     for (; OB_SUCC(ret) && iter != user_var_val_map_.get_val_map().end(); ++iter) {
       const ObString name = iter->first;
-      if (name.prefix_match("pkg.")) {
+      if (name.prefix_match(pl::package_key_prefix_v1)) {
         if (OB_FAIL(user_var_names.push_back(name))) {
           LOG_WARN("failed push back package var name", K(name));
         }
@@ -4929,7 +4929,7 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
       }
 
 #ifdef OB_BUILD_ORACLE_PL
-      if (OB_SUCC(ret) && OB_UNLIKELY(user_var_name.prefix_match("pkg."))) {
+      if (OB_SUCC(ret) && OB_UNLIKELY(user_var_name.prefix_match(pl::package_key_prefix_v1))) {
         if (OB_FAIL(pl::ObPLPackageManager::notify_package_variable_deserialize(
                       this, user_var_name, user_var_val))) {
           LOG_WARN("fail to notify package variable deserialize",
@@ -5952,6 +5952,17 @@ int ObBasicSessionInfo::get_regexp_session_vars(ObExprRegexpSessionVariables &va
 int ObBasicSessionInfo::get_activate_all_role_on_login(bool &v) const
 {
   return get_bool_sys_var(SYS_VAR_ACTIVATE_ALL_ROLES_ON_LOGIN, v);
+}
+
+int ObBasicSessionInfo::get_mview_refresh_dop(int64_t &v) const
+{
+  int ret = OB_SUCCESS;
+  if (exec_min_cluster_version_ >= CLUSTER_VERSION_4_3_5_1) {
+    ret = get_int64_sys_var(SYS_VAR_MVIEW_REFRESH_DOP, v);
+  } else {
+    v = 0;
+  }
+  return ret;
 }
 
 void ObBasicSessionInfo::reset_tx_variable(bool reset_next_scope)

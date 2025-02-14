@@ -18,6 +18,7 @@
 #include "lib/list/ob_dlist.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
+#include "lib/string/ob_string.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "storage/fts/ob_beng_ft_parser.h"
@@ -168,6 +169,23 @@ int ObFTParserJsonProps::config_set_quantifier_table(const ObString &str)
   return ret;
 }
 
+int ObFTParserJsonProps::config_set_ik_mode(const ObString &ik_mode)
+{
+  int ret = OB_SUCCESS;
+  ObJsonString *ik_mode_node = nullptr;
+  if (!IS_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("Props not init", K(ret));
+  } else if (OB_ISNULL(ik_mode_node = OB_NEWx(ObJsonString, &allocator_, ik_mode))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("Fail to new json string", K(ret));
+  } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_IK_MODE),
+                                       ik_mode_node))) {
+    LOG_WARN("Fail to add ik_mode", K(ret));
+  }
+  return ret;
+}
+
 int ObFTParserJsonProps::parse_from_valid_str(const ObString &str)
 {
   int ret = OB_SUCCESS;
@@ -177,7 +195,7 @@ int ObFTParserJsonProps::parse_from_valid_str(const ObString &str)
     ret = OB_NOT_INIT;
     LOG_WARN("Props not init", K(ret));
   } else if (str.empty()) {
-    // do nothing
+    // do nothing and use default {}
   } else if (OB_FAIL(ObJsonParser::get_tree(&allocator_, str, root))) {
     LOG_WARN("Fail to parse json", K(ret));
   } else {
@@ -186,17 +204,26 @@ int ObFTParserJsonProps::parse_from_valid_str(const ObString &str)
   return ret;
 }
 
+bool ObFTParserJsonProps::is_empty() const
+{
+  return (root_ == nullptr) || (root_->element_count() == 0);
+}
+
 int ObFTParserJsonProps::to_format_json(ObIAllocator &alloc, ObString &str)
 {
   int ret = OB_SUCCESS;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
   } else {
-    ObJsonBuffer j_buf(&alloc);
-    if (OB_FAIL(root_->print(j_buf, false))) {
-      LOG_WARN("Fail to print json", K(ret));
+    if (is_empty()) {
+      str = ObString(); // just make it empty;
     } else {
-      str = j_buf.string();
+      ObJsonBuffer j_buf(&alloc);
+      if (OB_FAIL(root_->print(j_buf, false))) {
+        LOG_WARN("Fail to print json", K(ret));
+      } else {
+        str = j_buf.string();
+      }
     }
   }
   return ret;
@@ -218,6 +245,8 @@ int ObFTParserJsonProps::config_get_min_token_size(int64_t &size) const
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("value is null", K(ret));
+    } else if (value->json_type() != ObJsonNodeType::J_INT) {
+      LOG_WARN("value is not int", K(ret));
     } else {
       size = value->get_int();
     }
@@ -241,6 +270,8 @@ int ObFTParserJsonProps::config_get_max_token_size(int64_t &size) const
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("value is null", K(ret));
+    } else if (value->json_type() != ObJsonNodeType::J_INT) {
+      LOG_WARN("value is not int", K(ret));
     } else {
       size = value->get_int();
     }
@@ -264,6 +295,8 @@ int ObFTParserJsonProps::config_get_ngram_token_size(int64_t &size) const
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("value is null", K(ret));
+    } else if (value->json_type() != ObJsonNodeType::J_INT) {
+      LOG_WARN("value is not int", K(ret));
     } else {
       size = value->get_int();
     }
@@ -286,6 +319,8 @@ int ObFTParserJsonProps::config_get_dict_table(ObString &str) const
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("value is null", K(ret));
+    } else if (value->json_type() != ObJsonNodeType::J_STRING) {
+      LOG_WARN("value is not string", K(ret));
     } else {
       ObJsonString *json_str = static_cast<ObJsonString *>(value);
       str = json_str->get_str();
@@ -310,6 +345,8 @@ int ObFTParserJsonProps::config_get_stopword_table(ObString &str) const
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("value is null", K(ret));
+    } else if (value->json_type() != ObJsonNodeType::J_STRING) {
+      LOG_WARN("value is not string", K(ret));
     } else {
       ObJsonString *json_str = static_cast<ObJsonString *>(value);
       str = json_str->get_str();
@@ -334,9 +371,37 @@ int ObFTParserJsonProps::config_get_quantifier_table(ObString &str) const
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("value is null", K(ret));
+    } else if (value->json_type() != ObJsonNodeType::J_STRING) {
+      LOG_WARN("value is not string", K(ret));
     } else {
       ObJsonString *json_str = static_cast<ObJsonString *>(value);
       str = json_str->get_str();
+    }
+  }
+  return ret;
+}
+
+int ObFTParserJsonProps::config_get_ik_mode(ObString &ik_mode) const
+{
+  int ret = OB_SUCCESS;
+  if (!IS_INIT) {
+    ret = OB_NOT_INIT;
+  } else {
+    ObIJsonBase *value = nullptr;
+    if (OB_FAIL(root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_IK_MODE), value))) {
+      if (OB_SEARCH_NOT_FOUND == ret) {
+      } else {
+        LOG_WARN("Fail to get ik mode", K(ret));
+      }
+    } else if (OB_ISNULL(value)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("value is null", K(ret));
+    } else if (value->json_type() != ObJsonNodeType::J_STRING) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("value is not string", K(ret));
+    } else {
+      ObJsonString *json_str = static_cast<ObJsonString *>(value);
+      ik_mode = json_str->get_str();
     }
   }
   return ret;
@@ -402,12 +467,8 @@ int ObFTParserJsonProps::rebuild_props_for_ddl(const ObString &parser_name,
       if (OB_FAIL(beng_rebuild_props_for_ddl(log_to_user))) {
         LOG_WARN("fail to rebuild props for ddl", K(ret));
       }
-    } else {
-      ret = OB_NOT_SUPPORTED;
-      if (log_to_user) {
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "parser type is not supported.");
-      }
-      LOG_WARN("Invalid parser type", K(ret), K(parser_name));
+    } else if (OB_FAIL(plugin_rebuild_props_for_ddl(log_to_user))) {
+      LOG_WARN("fail to rebuild props for ddl", K(ret));
     }
   }
 
@@ -422,6 +483,7 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
       ObFTSLiteral::CONFIG_NAME_DICT_TABLE,
       ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE,
       ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE,
+      ObFTSLiteral::CONFIG_NAME_IK_MODE,
   };
 
   bool has_unsupported = false;
@@ -473,6 +535,36 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
       }
     } else {
       // check quantifier table valid
+    }
+
+    if (OB_FAIL(ret)) {
+      // do nothing
+    } else {
+      ObString ik_mode;
+      if (OB_FAIL(config_get_ik_mode(ik_mode))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          if (OB_FAIL(config_set_ik_mode(ObFTSLiteral::FT_IK_MODE_SMART))) {
+            LOG_WARN("Failed to set ik mode", K(ret));
+          }
+        } else {
+          LOG_WARN("Fail to get ik mode", K(ret));
+          if (log_to_user) {
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::IK_MODE_SCOPE_STR);
+          }
+        }
+      } else {
+        if (0 == ObString(ObFTSLiteral::FT_IK_MODE_SMART).case_compare(ik_mode)) {
+          // okay
+        } else if (0 == ObString(ObFTSLiteral::FT_IK_MODE_MAX_WORD).case_compare(ik_mode)) {
+          // okay
+        } else {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("Invalid ik mode", K(ret), K(ik_mode));
+          if (log_to_user) {
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::IK_MODE_SCOPE_STR);
+          }
+        }
+      }
     }
   }
   return ret;
@@ -650,6 +742,18 @@ int ObFTParserJsonProps::beng_rebuild_props_for_ddl(const bool log_to_user)
   return ret;
 }
 
+int ObFTParserJsonProps::plugin_rebuild_props_for_ddl(const bool log_to_user)
+{
+  int ret = OB_SUCCESS;
+  if (!is_empty()) {
+    ret = OB_NOT_SUPPORTED;
+    if (log_to_user) {
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "Non-builtin parser property");
+    }
+  };
+  return ret;
+}
+
 int ObFTParserJsonProps::check_conflict_config_for_resolve(bool &has_conflict) const
 {
   int ret = OB_SUCCESS;
@@ -727,6 +831,8 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
   } else if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
+  } else if (properties.is_empty()) {
+    // not output properties
   } else {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PARSER_PROPERTIES=("))) {
       LOG_WARN("fail to printf parser properties", K(ret), K(buf_len), K(pos), K(properties));
@@ -759,6 +865,20 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
       __FT_PARSER_PROPERTY_SHOW_COMMA(need_comma);
       if (FAILEDx(databuff_printf(buf, buf_len, pos, "max_token_size=%ld", max_token_size))) {
         LOG_WARN("fail to printf max_token_size", K(ret), K(buf_len), K(pos), K(max_token_size));
+      }
+    }
+
+    ObString ik_mode;
+    if (FAILEDx(properties.config_get_ik_mode(ik_mode))) {
+      if (OB_SEARCH_NOT_FOUND == ret) {
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN("Fail to get ik mode", K(ret));
+      }
+    } else {
+      __FT_PARSER_PROPERTY_SHOW_COMMA(need_comma);
+      if (FAILEDx(databuff_printf(buf, buf_len, pos, "ik_mode=\"%s\"", ik_mode.ptr()))) {
+        LOG_WARN("fail to printf ik mode", K(ret), K(buf_len), K(pos), K(ik_mode));
       }
     }
 
@@ -804,6 +924,25 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
       dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
       stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
       quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
+      ObString ik_smart;
+      if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          // from old version, ik_mode is not set, so use default value
+          ik_mode_smart_ = true;
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get ik mode", K(ret));
+        }
+      } else {
+        if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_SMART))) {
+          ik_mode_smart_ = true;
+        } else if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_MAX_WORD))) {
+          ik_mode_smart_ = false;
+        } else {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid ik_smart", K(ret), K(ik_smart));
+        }
+      }
     } else if (parser.is_space()) {
       if (json_str.empty()) {
         min_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE;
@@ -836,8 +975,8 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
 ObFTParserProperty::ObFTParserProperty()
     : min_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE),
       max_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE),
-      ngram_token_size_(ObFTSLiteral::FT_DEFAULT_NGRAM_TOKEN_SIZE), stopword_table_(),
-      dict_table_(), quantifier_table_()
+      ngram_token_size_(ObFTSLiteral::FT_DEFAULT_NGRAM_TOKEN_SIZE), ik_mode_smart_(true),
+      stopword_table_(), dict_table_(), quantifier_table_()
 {
 }
 

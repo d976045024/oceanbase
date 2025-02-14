@@ -210,6 +210,17 @@ void ObGlobalHint::merge_parallel_hint(int64_t parallel)
   }
 }
 
+void ObGlobalHint::merge_dml_parallel_hint(int64_t dml_parallel)
+{
+  if (UNSET_PARALLEL < dml_parallel) {
+    if (UNSET_PARALLEL >= dml_parallel_) {
+      dml_parallel_ = dml_parallel;
+    } else {
+      dml_parallel_ = std::min(dml_parallel, dml_parallel_);
+    }
+  }
+}
+
 void ObGlobalHint::merge_dynamic_sampling_hint(int64_t dynamic_sampling)
 {
   if (dynamic_sampling != UNSET_DYNAMIC_SAMPLING) {
@@ -350,6 +361,7 @@ bool ObGlobalHint::has_hint_exclude_concurrent() const
          || false != force_refresh_lc_
          || !log_level_.empty()
          || has_parallel_hint()
+         || has_dml_parallel_hint()
          || false != monitor_
          || ObPDMLOption::NOT_SPECIFIED != pdml_option_
          || ObParamOption::NOT_SPECIFIED != param_option_
@@ -366,7 +378,8 @@ bool ObGlobalHint::has_hint_exclude_concurrent() const
          || flashback_read_tx_uncommitted_
          || has_direct_load()
          || !resource_group_.empty()
-         || ObParallelDASOption::NOT_SPECIFIED != parallel_das_dml_option_;
+         || ObParallelDASOption::NOT_SPECIFIED != parallel_das_dml_option_
+         || !px_node_hint_.empty();
 }
 
 void ObGlobalHint::reset()
@@ -383,6 +396,7 @@ void ObGlobalHint::reset()
   force_refresh_lc_ = false;
   log_level_.reset();
   parallel_ = UNSET_PARALLEL;
+  dml_parallel_ = UNSET_PARALLEL;
   monitor_ = false;
   pdml_option_ = ObPDMLOption::NOT_SPECIFIED;
   param_option_ = ObParamOption::NOT_SPECIFIED;
@@ -401,6 +415,7 @@ void ObGlobalHint::reset()
   dblink_hints_.reset();
   resource_group_.reset();
   parallel_das_dml_option_ = ObParallelDASOption::NOT_SPECIFIED;
+  px_node_hint_.reset();
 }
 
 int ObGlobalHint::merge_global_hint(const ObGlobalHint &other)
@@ -418,6 +433,7 @@ int ObGlobalHint::merge_global_hint(const ObGlobalHint &other)
   force_trace_log_ |= other.force_trace_log_;
   merge_max_concurrent_hint(other.max_concurrent_);
   merge_parallel_hint(other.parallel_);
+  merge_dml_parallel_hint(other.dml_parallel_);
   monitor_ |= other.monitor_;
   merge_param_option_hint(other.param_option_);
   merge_opt_features_version_hint(other.opt_features_version_);
@@ -439,6 +455,8 @@ int ObGlobalHint::merge_global_hint(const ObGlobalHint &other)
     LOG_WARN("failed to merge opt param hint", K(ret));
   } else if (OB_FAIL(append(ob_ddl_schema_versions_, other.ob_ddl_schema_versions_))) {
     LOG_WARN("failed to append ddl_schema_version", K(ret));
+  } else if (OB_FAIL(px_node_hint_.merge_px_node_hint(other.px_node_hint_))) {
+    LOG_WARN("failed to merge px_node_addrs", K(ret));
   }
   return ret;
 }
@@ -548,6 +566,9 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
       PRINT_GLOBAL_HINT_STR("PARALLEL( MANUAL )");
     }
   }
+  if (OB_SUCC(ret) && has_dml_parallel_hint() && !ignore_parallel_for_dblink) { //DML_PARALLEL
+    PRINT_GLOBAL_HINT_NUM("DML_PARALLEL", dml_parallel_);
+  }
   if (OB_SUCC(ret) && monitor_) { //MONITOR
     PRINT_GLOBAL_HINT_STR("MONITOR");
   }
@@ -631,6 +652,9 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
                                     resource_group_.length(), resource_group_.ptr() ))) {
       LOG_WARN("failed to print resource group hint", K(ret));
     }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(px_node_hint_.print_px_node_hint(plan_text))) {
+    LOG_WARN("failed to print px node hint", K(ret));
   }
   return ret;
 }
@@ -937,6 +961,7 @@ bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObO
                                       || 0 == val.get_varchar().case_compare("false"));
       break;
     }
+    case PUSHDOWN_STORAGE_LEVEL:
     case RANGE_INDEX_DIVE_LIMIT:
     case PARTITION_INDEX_DIVE_LIMIT:
       is_valid = val.is_int();
@@ -2807,6 +2832,8 @@ int ObPQHint::print_hint_desc(PlanText &plan_text) const
     LOG_WARN("unexpected null", K(ret), K(dist_method_));
   } else if (OB_FAIL(BUF_PRINTF(" %s", str))) {
     LOG_WARN("failed to print dist method", K(ret));
+  } else if (ObGlobalHint::UNSET_PARALLEL < parallel_ && OB_FAIL(BUF_PRINTF(" %ld", parallel_))) {
+    LOG_WARN("fail to print parallel", K(ret));
   }
   return ret;
 }
@@ -3452,6 +3479,133 @@ bool ObIndexHint::is_match_index(const ObCollationType cs_type,
     match = false;
   }
   return match;
+}
+
+// use the first px_node_policy hint now.
+void ObPxNodeHint::merge_px_node_policy(ObPxNodePolicy px_node_policy)
+{
+  if (!px_node_addrs_.empty()) {
+    // do nothing
+  } else if (px_node_policy_ == ObPxNodePolicy::INVALID) {
+    px_node_policy_ = px_node_policy;
+  }
+}
+
+// use the first px_node_addrs hint now.
+int ObPxNodeHint::merge_px_node_addrs(const ObIArray<ObAddr> &px_node_addrs)
+{
+  int ret = OB_SUCCESS;
+  if (!px_node_addrs_.empty() || px_node_addrs.empty()) {
+    // do nothing
+  } else if (OB_FAIL(px_node_addrs_.assign(px_node_addrs))) {
+    LOG_WARN("px_node_addrs failed to assign", K(ret));
+  }
+  return ret;
+}
+
+// use the first px_node_count hint now.
+void ObPxNodeHint::merge_px_node_count(int64_t px_node_count)
+{
+  if (!px_node_addrs_.empty()) {
+    // do nothing
+  } else if (px_node_count_ == UNSET_PX_NODE_COUNT) {
+    px_node_count_ = px_node_count;
+  }
+}
+
+int ObPxNodeHint::merge_px_node_hint(const ObPxNodeHint &other)
+{
+  int ret = OB_SUCCESS;
+  if (!px_node_addrs_.empty()) {
+    // do nothing
+  } else if (other.px_node_addrs_.empty()) {
+    if (px_node_policy_ == ObPxNodePolicy::INVALID) {
+      px_node_policy_ = other.px_node_policy_;
+    }
+    if (px_node_count_ == UNSET_PX_NODE_COUNT) {
+      px_node_count_ = other.px_node_count_;
+    }
+  } else if (OB_FAIL(px_node_addrs_.assign(other.px_node_addrs_))) {
+    LOG_WARN("px_node_addrs failed to assign", K(ret));
+  }
+  return ret;
+}
+
+int ObPxNodeHint::print_px_node_addrs(PlanText &plan_text) const
+{
+  int ret = OB_SUCCESS;
+  if (!px_node_addrs_.empty()) {
+    char *buf = plan_text.buf_;
+    int64_t &buf_len = plan_text.buf_len_;
+    int64_t &pos = plan_text.pos_;
+    const char *outline_indent = ObQueryHint::get_outline_indent(plan_text.is_oneline_);
+    if (OB_FAIL(BUF_PRINTF("%sPX_NODE_ADDRS(", outline_indent))) {
+      LOG_WARN("Fail to print PX_NODE_ADDRS", K(ret));
+    }
+    char addr_buf[MAX_IP_PORT_LENGTH] = "";
+    for (int i = 0; OB_SUCC(ret) && i < px_node_addrs_.count(); ++i) {
+      if (i != 0) {
+        if (OB_FAIL(BUF_PRINTF(","))) {
+          LOG_WARN("Fail to print ,", K(ret));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(px_node_addrs_.at(i).ip_port_to_string(addr_buf, sizeof(addr_buf)))) {
+        LOG_WARN("Fail to to_string", K(ret));
+      } else if (OB_FAIL(BUF_PRINTF("\'%.*s\'",
+                                    static_cast<int>(sizeof(addr_buf)), addr_buf))) {
+        LOG_WARN("Fail to print addr", K(ret));
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(BUF_PRINTF(")"))) {
+      LOG_WARN("failed to print blocking hint", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObPxNodeHint::print_px_node_hint(PlanText &plan_text) const {
+  int ret = OB_SUCCESS;
+  char *buf = plan_text.buf_;
+  int64_t &buf_len = plan_text.buf_len_;
+  int64_t &pos = plan_text.pos_;
+  const char* outline_indent = ObQueryHint::get_outline_indent(plan_text.is_oneline_);
+  if (OB_SUCC(ret)) {
+    // When PX_NODE_ADDRS is active,
+    // PX_NODE_POLICY and PX_NODE_COUNT do not take effect.
+    if (!px_node_addrs_.empty()) {  // PX_NODE_ADDRS
+      if (OB_FAIL(print_px_node_addrs(plan_text))) {
+        LOG_WARN("failed to print candidate node pool hint", K(ret));
+      }
+    } else {
+      if (px_node_policy_ != ObPxNodePolicy::INVALID) { // PX_NODE_POLICY
+        switch (px_node_policy_) {
+          case ObPxNodePolicy::DATA: {
+            PRINT_GLOBAL_HINT_STR("PX_NODE_POLICY(\'DATA\')");
+            break;
+          }
+          case ObPxNodePolicy::ZONE: {
+            PRINT_GLOBAL_HINT_STR("PX_NODE_POLICY(\'ZONE\')");
+            break;
+          }
+          case ObPxNodePolicy::CLUSTER: {
+            PRINT_GLOBAL_HINT_STR("PX_NODE_POLICY(\'CLUSTER\')");
+            break;
+          }
+          default: {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected px_node_policy", K(px_node_policy_));
+            break;
+          }
+        }
+      }
+      if (OB_SUCC(ret) &&
+          px_node_count_ != UNSET_PX_NODE_COUNT) {  // PX_NODE_COUNT
+        PRINT_GLOBAL_HINT_NUM("PX_NODE_COUNT", px_node_count_);
+      }
+    }
+  }
+  return ret;
 }
 
 }//end of namespace sql

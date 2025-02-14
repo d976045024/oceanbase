@@ -17,6 +17,7 @@
 #include "sql/resolver/dml/ob_merge_stmt.h"
 #include "sql/optimizer/ob_opt_cost_model_parameter.h"
 #include "src/share/stat/ob_opt_stat_manager.h"
+#include "src/sql/engine/px/ob_dfo_scheduler.h"
 
 using namespace oceanbase;
 using namespace sql;
@@ -373,6 +374,9 @@ int ObOptimizer::check_parallel_das_dml_enabled(const ObDMLStmt &stmt,
     // not user request
     can_use_parallel_das_dml = false;
     LOG_TRACE("not user request, can't support parallel_das_dml");
+  } else if (!is_strict_mode(session.get_sql_mode())) {
+    can_use_parallel_das_dml = false;
+    LOG_TRACE("not strict mode, can't support parallel_das_dml");
   } else if (OB_FAIL(check_parallel_das_dml_supported_feature(static_cast<const ObDelUpdStmt&>(stmt),
                                                               session,
                                                               can_use_parallel_das_dml))) {
@@ -466,6 +470,9 @@ int ObOptimizer::check_pdml_enabled(const ObDMLStmt &stmt,
   } else if (!can_use_pdml || ctx_.is_online_ddl() ||
              (stmt::T_INSERT == stmt.get_stmt_type() && static_cast< const ObInsertStmt &>(stmt).is_normal_table_overwrite())) {
     // do nothing
+  } else if (!is_strict_mode(session.get_sql_mode())) {
+    can_use_pdml = false;
+    LOG_TRACE("not strict mode, can't support PDML");
   } else if (ctx_.get_global_hint().get_pdml_option() == ObPDMLOption::ENABLE) {
     // 1. enable parallel dml by hint
   } else if (ctx_.get_global_hint().get_pdml_option() == ObPDMLOption::DISABLE
@@ -478,7 +485,7 @@ int ObOptimizer::check_pdml_enabled(const ObDMLStmt &stmt,
     LOG_WARN("failed to get sys variable for parallel degree policy", K(ret));
   } else if (enable_auto_dop && !ctx_.get_global_hint().has_parallel_hint()) {
     // 2.2 enable parallel dml by auto dop
-  } else if (!session.is_user_session()) {
+  } else if (!session.is_user_session() && !session.get_ddl_info().is_refreshing_mview()) {
     can_use_pdml = false;
   } else if (OB_FAIL(session.get_enable_parallel_dml(session_enable_pdml))
              || OB_FAIL(session.get_force_parallel_dml_dop(session_pdml_dop))) {
@@ -615,7 +622,7 @@ int ObOptimizer::check_is_heap_table(const ObDMLStmt &stmt)
                                                     dml_table_infos.at(0)->ref_table_id_,
                                                     table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
-  } else if(OB_NOT_NULL(table_schema) && table_schema->is_heap_table()) {
+  } else if(OB_NOT_NULL(table_schema) && table_schema->is_table_without_pk()) {
     ctx_.set_is_pdml_heap_table(true);
   }
   return ret;
@@ -870,10 +877,42 @@ int ObOptimizer::init_parallel_policy(ObDMLStmt &stmt, const ObSQLSessionInfo &s
   if (OB_FAIL(ret)) {
   } else if (ctx_.is_use_auto_dop() && OB_FAIL(set_auto_dop_params(session))) {
     LOG_WARN("failed to set auto dop params", K(ret));
+  } else if (OB_FAIL(init_px_node_opt_info(session.get_effective_tenant_id()))) {
+    LOG_WARN("failed to init px node opt info", K(ret));
   } else {
     LOG_TRACE("succeed to init parallel policy", K(session.is_user_session()),
                         K(ctx_.can_use_pdml()), K(ctx_.get_parallel_rule()), K(ctx_.get_parallel()),
                         K(ctx_.get_auto_dop_params()));
+  }
+  return ret;
+}
+
+int ObOptimizer::init_px_node_opt_info(int64_t tenant_id)
+{
+  int ret = OB_SUCCESS;
+  const ObGlobalHint &global_hint = ctx_.get_global_hint();
+  // PX_NODE_ADDRS has a higher priority than PX_NODE_COUNT and PX_NODE_POLICY.
+  if (!global_hint.px_node_hint_.px_node_addrs_.empty()) {
+    ctx_.set_px_node_selection_mode(ObPxNodeSelectionMode::SPECIFY_NODE);
+  } else {
+    if (global_hint.px_node_hint_.px_node_count_ != ObPxNodeHint::UNSET_PX_NODE_COUNT) {
+      ctx_.set_px_node_selection_mode(ObPxNodeSelectionMode::SPECIFY_COUNT);
+    } else {
+      ctx_.set_px_node_selection_mode(ObPxNodeSelectionMode::DEFAULT);
+    }
+    // For PX_NODE_POLICY,
+    // the priority of hints is higher than that of tenant configuration settings.
+    if (global_hint.px_node_hint_.px_node_policy_ != ObPxNodePolicy::INVALID) {
+      ctx_.set_px_node_policy(global_hint.px_node_hint_.px_node_policy_);
+    } else {
+      ObPxNodePolicy tenant_config_px_node_policy;
+      if (OB_FAIL(ObPxNodePool::get_tenant_config_px_node_policy(tenant_id,
+                          tenant_config_px_node_policy))) {
+        LOG_WARN("Failed to get tenant config px_node_policy", K(ret));
+      } else {
+        ctx_.set_px_node_policy(tenant_config_px_node_policy);
+      }
+    }
   }
   return ret;
 }

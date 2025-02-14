@@ -157,11 +157,12 @@ int ObSql::stmt_query(const common::ObString &stmt, ObSqlCtx &context, ObResultS
   FLTSpanGuard(sql_compile);
   ObTruncatedString trunc_stmt(stmt);
 #ifndef NDEBUG
-  LOG_INFO("Begin to handle text statement", K(trunc_stmt),
+  LOG_INFO("Begin to handle text statement",
            "sess_id", result.get_session().get_sessid(),
            "proxy_sess_id", result.get_session().get_proxy_sessid(),
            "tenant_id", result.get_session().get_effective_tenant_id(),
-           "execution_id", result.get_session().get_current_execution_id());
+           "execution_id", result.get_session().get_current_execution_id(),
+           K(trunc_stmt));
 #endif
   NG_TRACE(parse_begin);
   //1 check inited
@@ -2126,8 +2127,7 @@ int ObSql::clac_fixed_param_store(const stmt::StmtType stmt_type,
                                                       static_cast<ObCollationType>(server_collation),
                                                       NULL, session.get_sql_mode(),
                                                       enable_decimal_int, compat_type,
-                                                      enable_mysql_compatible_dates,
-                                                      session.get_local_ob_enable_plan_cache()))) {
+                                                      enable_mysql_compatible_dates))) {
       SQL_PC_LOG(WARN, "fail to resolve const", K(ret));
     } else if (OB_FAIL(add_param_to_param_store(value, fixed_param_store))) {
       LOG_WARN("failed to add param to param store", K(ret), K(value), K(fixed_param_store));
@@ -5339,7 +5339,7 @@ int ObSql::before_resolve_array_params(ObPlanCacheCtx &pc_ctx,
                                        ObBitSet<> &neg_param_index,
                                        ObBitSet<> &not_param_index,
                                        ObBitSet<> &must_be_positive_index,
-                                       ObBitSet<> &formalize_prec_index)
+                                       ObBitSet<> &fmt_int_or_ch_decint_idx)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ab_params = static_cast<ParamStore *>(pc_ctx.allocator_.alloc(sizeof(ParamStore))))) {
@@ -5358,7 +5358,7 @@ int ObSql::before_resolve_array_params(ObPlanCacheCtx &pc_ctx,
     LOG_WARN("failed to assign bit sets", K(ret));
   } else if (OB_FAIL(must_be_positive_index.add_members2(pc_ctx.must_be_positive_index_))) {
     LOG_WARN("failed to assign bit sets", K(ret));
-  } else if (OB_FAIL(formalize_prec_index.add_members2(pc_ctx.formalize_prec_index_))) {
+  } else if (OB_FAIL(fmt_int_or_ch_decint_idx.add_members2(pc_ctx.fmt_int_or_ch_decint_idx_))) {
     LOG_WARN("failed to assign bit sets", K(ret));
   }
   return ret;

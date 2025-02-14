@@ -1029,6 +1029,7 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>PARALLEL { return PARALLEL; }
 <hint>MANUAL { return MANUAL; }
 <hint>NO_PARALLEL { return NO_PARALLEL; }
+<hint>DML_PARALLEL { return DML_PARALLEL; }
 <hint>MONITOR  { return MONITOR; }
 <hint>AUTO { return AUTO; }
 <hint>FORCE { return FORCE; }
@@ -1197,6 +1198,9 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>RESOURCE_GROUP { return RESOURCE_GROUP; }
 <hint>PQ_GBY { return PQ_GBY; }
 <hint>PQ_DISTINCT { return PQ_DISTINCT; }
+<hint>PX_NODE_POLICY {return PX_NODE_POLICY; }
+<hint>PX_NODE_ADDRS {return PX_NODE_ADDRS; }
+<hint>PX_NODE_COUNT {return PX_NODE_COUNT; }
 <hint>{identifier} {
   if (!(IS_FAST_PARAMETERIZE)) {
     check_value(yylval);

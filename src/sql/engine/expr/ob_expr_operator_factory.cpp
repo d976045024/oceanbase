@@ -490,6 +490,8 @@
 #include "sql/engine/expr/ob_expr_priv_st_geohash.h"
 #include "sql/engine/expr/ob_expr_priv_st_makepoint.h"
 #include "sql/engine/expr/ob_expr_to_pinyin.h"
+#include "sql/engine/expr/ob_expr_url_codec.h"
+#include "sql/engine/expr/ob_expr_keyvalue.h"
 #include "sql/engine/expr/ob_expr_demote_cast.h"
 #include "sql/engine/expr/ob_expr_array_sum.h"
 #include "sql/engine/expr/ob_expr_array_length.h"
@@ -716,6 +718,7 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprTimeStampAdd);
     REG_OP(ObExprToType);
     REG_OP(ObExprChar);
+    REG_OP(ObExprToChar);
     REG_OP(ObExprConvert);
     REG_OP(ObExprCoalesce);
     REG_OP(ObExprNvl);
@@ -1247,13 +1250,16 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprGetMySQLRoutineParameterTypeStr);
     REG_OP(ObExprCalcOdpsSize);
     REG_OP(ObExprToPinyin);
+    REG_OP(ObExprURLEncode);
+    REG_OP(ObExprURLDecode);
+    REG_OP(ObExprKeyValue);
     REG_OP(ObExprHello);
   }();
 // 注册oracle系统函数
   REG_OP_ORCL(ObExprSysConnectByPath);
   REG_OP_ORCL(ObExprTimestampNvl);
   REG_OP_ORCL(ObExprOracleToDate);
-  REG_OP_ORCL(ObExprOracleToChar);
+  REG_OP_ORCL(ObExprToChar);
   REG_OP_ORCL(ObExprToClob);
   REG_OP_ORCL(ObExprToBlob);
   REG_OP_ORCL(ObExprToTimestamp);
@@ -1586,6 +1592,7 @@ void ObExprOperatorFactory::register_expr_operators()
   REG_OP_ORCL(ObExprInnerDecodeLike);
   REG_OP_ORCL(ObExprInnerDoubleToInt);
   REG_OP_ORCL(ObExprCalcOdpsSize);
+  REG_OP_ORCL(ObExprKeyValue);
 }
 
 bool ObExprOperatorFactory::is_expr_op_type_valid(ObExprOperatorType type)

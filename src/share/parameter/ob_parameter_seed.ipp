@@ -2069,11 +2069,13 @@ DEF_BOOL(_enable_inner_session_mgr, OB_TENANT_PARAMETER, "True", "enable/disable
 DEF_BOOL(_enable_trace_tablet_leak, OB_TENANT_PARAMETER, "False",
         "enable t3m tablet leak checker. The default value is False",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE));
-DEF_BOOL(enable_auto_split, OB_TENANT_PARAMETER, "False",
+DEF_BOOL_WITH_CHECKER(enable_auto_split, OB_TENANT_PARAMETER, "False",
+         common::ObConfigEnableAutoSplitChecker,
          "if the auto-partition clause is not used"
          "this config judge whether to enable auto-partition for creating table.",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_CAP(auto_split_tablet_size, OB_TENANT_PARAMETER, "128M", "[128M,)",
+DEF_CAP_WITH_CHECKER(auto_split_tablet_size, OB_TENANT_PARAMETER, "128M", common::ObConfigAutoSplitTabletSizeChecker,
+        "[128M,)",
         "when create an auto-partitioned table in \"create table\" syntax or "
         "modify a table as an auto-partitioned table in \"alter table\" syntax,"
         "if the splitting threshold of tablet size is not setted,"
@@ -2422,6 +2424,13 @@ DEF_INT(query_memory_limit_percentage, OB_TENANT_PARAMETER, "50", "[0,100]",
 DEF_INT(package_state_sync_max_size, OB_TENANT_PARAMETER, "8192", "[0, 16777216]",
         "the max sync size of single package state that can sync package var value. If over it, package state will not sync package var value. Range: [0, 16777216] in integer",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_DBL(_sqlmon_memory_scale, OB_TENANT_PARAMETER, "1", "[0.1, 30]",
+        "The scale factor of available memory for the SQL plan monitor.",
+        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_BOOL(_ndv_runtime_bloom_filter_size, OB_CLUSTER_PARAMETER, "True",
+         "whether to use NDV to build a bloom filter in runtime filter."
+         "Value:  True:turned on  False: turned off",
+         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_STR_WITH_CHECKER(plugins_load, OB_CLUSTER_PARAMETER, "",
                      common::ObConfigPluginsLoadChecker,
                      "The plugins you want to load when starting observer. "
@@ -2429,7 +2438,6 @@ DEF_STR_WITH_CHECKER(plugins_load, OB_CLUSTER_PARAMETER, "",
                      "Format: 'libsoname1.so:on,libsoname2.so:off' "
                      "which `on'(default) means the plugin is enabled, `off' means the plugin is disabled(don't load), ",
                      ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-
 DEF_BOOL(ob_enable_java_env, OB_CLUSTER_PARAMETER, "False",
         "Enable or disable java env for external table.",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -2451,6 +2459,17 @@ DEF_BOOL(_use_odps_jni_connector, OB_CLUSTER_PARAMETER, "False",
 DEF_CAP(_parquet_row_group_prebuffer_size, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
         "the parquet prefetch maximum row group size. Range: [0, +∞)",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
+DEF_STR_WITH_CHECKER(px_node_policy, OB_TENANT_PARAMETER, "DATA",
+                     common::ObConfigPxNodePolicyChecker,
+                     "Determining the candidate pool for PX calculation nodes."
+                     "\"DATA\": All data nodes involved in the current SQL."
+                     "\"ZONE\": All nodes within the zones involved in the current SQL that belong to the tenant."
+                     "\"CLUSTER\": All nodes involved by the current tenant.",
+                     ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_INT(_max_px_workers_per_cpu, OB_TENANT_PARAMETER, "1", "[1,30]",
+        "The upper limit of PX workers that each CPU can carry. Range: [1,30]",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_TIME(_pc_adaptive_min_exec_time_threshold, OB_TENANT_PARAMETER, "1s", "[0,)",
         "minimum execution time threshold for enabling adaptive plan cache. Range: [0, +∞]",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -2463,11 +2482,10 @@ DEF_BOOL(enable_adaptive_plan_cache, OB_TENANT_PARAMETER, "False",
 DEF_BOOL(_force_enable_plan_tracing, OB_TENANT_PARAMETER, "True",
          "controls whether plan tracking is enabled when plan cache is disabled",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_STR_WITH_CHECKER(default_table_organization, OB_TENANT_PARAMETER, "INDEX",
-        common::ObConfigDefaultOrganizationChecker,
+DEF_STR(default_table_organization, OB_TENANT_PARAMETER, "INDEX",
         "The default_organization configuration option allows you to set the default"
-        " table organization mode to either HEAP (unordered data storage for OLAP) or"
-        " INDEX (index-organized storage for OLTP) when creating new tables.",
+        " table organization mode to either HEAP (unordered data storage) or INDEX (the data"
+        " rows are held in an index defined on the primary key for the table) when creating new tables.",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 ERRSIM_DEF_INT(errsim_restore_ls_id, OB_CLUSTER_PARAMETER, "0", "[0,)",
@@ -2485,4 +2503,8 @@ DEF_BOOL(_enable_auth_switch, OB_CLUSTER_PARAMETER, "True",
 
 DEF_BOOL(_enable_malloc_v2, OB_CLUSTER_PARAMETER, "True",
          "Enable or disable ob_malloc_v2.",
+         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
+DEF_INT(utl_file_open_max, OB_CLUSTER_PARAMETER, "50", "[50, 600]",
+         "the maximum number of utl files that can be opened simultaneously in a single node under the Oracle model.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

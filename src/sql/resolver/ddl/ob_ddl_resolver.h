@@ -166,6 +166,12 @@ public:
     AT_VALUES_NODE = 1,
     SPLIT_PARTITION_TYPE_NODE = 2
   };
+  enum ObTableOrganizationType : uint8_t {
+    OB_ORGANIZATION_INVALID = 0,
+    OB_INDEX_ORGANIZATION = 1,
+    OB_HEAP_ORGANIZATION = 2,
+    OB_ORGANIZATION_MAX
+  };
   static const int NAMENODE = 1;
 
   static const int64_t MAX_PROGRESSIVE_MERGE_NUM = 100;
@@ -456,8 +462,34 @@ public:
       const share::schema::ObTableSchema &table_schema,
       const ObString &column_name,
       ObAlterTableStmt *alter_table_stmt);
-  int check_is_json_contraint(ObTableSchema &tmp_table_schema, ObIArray<ObConstraint> &csts, ParseNode *cst_check_expr_node);
+  int check_is_json_contraint(ObTableSchema &tmp_table_schema,
+                              ObIArray<ObConstraint> &csts,
+                              ParseNode *cst_check_expr_node);
 
+  static int resolve_file_prefix(ObString &url,
+                                 ObSqlString &prefix_str,
+                                 common::ObStorageType &device_type,
+                                 ObResolverParams &params);
+  static int resolve_external_file_format(const ParseNode *format_node,
+                                          ObResolverParams &params,
+                                          ObExternalFileFormat& format,
+                                          ObString &format_str);
+  static int resolve_external_file_pattern(const ParseNode *option_node,
+                                          bool is_external_table,
+                                          common::ObIAllocator &allocator,
+                                          const ObSQLSessionInfo *session_info,
+                                          ObString &pattern);
+
+  static int resolve_external_file_location(ObResolverParams &params,
+                                            ObTableSchema &table_schema,
+                                            const ParseNode *string_node);
+
+  static int mask_properties_sensitive_info(const ParseNode *node,
+                                            ObString &ddl_sql,
+                                            ObIAllocator *allocator,
+                                            ObString &masked_sql);
+
+  static int check_format_valid(const ObExternalFileFormat &format, bool &is_valid);
   int check_column_in_check_constraint(
       const share::schema::ObTableSchema &table_schema,
       const ObReducedVisibleColSet &drop_column_names_set,
@@ -623,7 +655,6 @@ protected:
       const bool is_oracle_temp_table = false,
       const bool is_create_table_as = false,
       const bool allow_has_default = true);
-  int resolve_file_prefix(ObString &url, ObSqlString &prefix_str, common::ObStorageType &device_type);
   int resolve_uk_name_from_column_attribute(
       ParseNode *attrs_node,
       common::ObString &uk_name);
@@ -643,6 +674,8 @@ protected:
                                       ParseNode *attrs_node,
                                       ObColumnResolveStat &reslove_stat,
                                       common::ObString &pk_name,
+                                      bool &is_modify_column,
+                                      bool &is_modify_column_visibility,
                                       const bool allow_has_default = true);
   int resolve_normal_column_attribute_check_cons(ObColumnSchemaV2 &column,
                                                  ParseNode *attrs_node,
@@ -1015,10 +1048,6 @@ protected:
   int check_and_set_individual_subpartition_names(ObPartitionedStmt *stmt,
                                                   share::schema::ObTableSchema &table_schema);
 
-  int mask_properties_sensitive_info(const ParseNode *node, ObString &ddl_sql, ObString &masked_sql);
-
-  int check_format_valid(const ObExternalFileFormat &format, bool &is_valid);
-
   int deep_copy_string_in_part_expr(ObPartitionedStmt* stmt);
   int deep_copy_column_expr_name(common::ObIAllocator &allocator, ObIArray<ObRawExpr*> &exprs);
   int check_ttl_definition(const ParseNode *node);
@@ -1047,6 +1076,7 @@ protected:
       bool &is_prefix);
   bool is_support_split_index_key(const INDEX_KEYNAME index_keyname);
   bool is_column_group_supported() const;
+  bool is_organization_set_to_heap() { return table_organization_ == ObTableOrganizationType::OB_HEAP_ORGANIZATION; }
   int64_t block_size_;
   int64_t consistency_level_;
   INDEX_TYPE index_scope_;
@@ -1116,6 +1146,8 @@ protected:
   ObExternalFileFormat::FormatType external_table_format_type_;
   common::ObBitSet<> mocked_external_table_column_ids_;
   common::ObString index_params_;
+  ObTableOrganizationType table_organization_;
+  int64_t mv_refresh_dop_;
   common::ObString vec_column_name_;
   ObIndexType vec_index_type_;
   bool enable_macro_block_bloom_filter_;

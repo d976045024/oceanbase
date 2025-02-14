@@ -439,7 +439,7 @@ public:
       candidate_plans_.reuse();
       is_final_sort_ = false;
     }
-    int get_best_plan(ObLogicalOperator *&best_plan)
+    int get_best_plan(ObLogicalOperator *&best_plan) const
     {
       int ret = common::OB_SUCCESS;
       best_plan = NULL;
@@ -479,7 +479,8 @@ public:
       rollup_grouping_id_expr_(nullptr),
       enable_hash_rollup_(true),
       force_hash_rollup_(false),
-      dup_expr_pairs_()
+      dup_expr_pairs_(),
+      grouping_dop_(ObGlobalHint::UNSET_PARALLEL)
     {
     }
     virtual ~GroupingOpHelper() {}
@@ -547,6 +548,7 @@ public:
     bool enable_hash_rollup_;
     bool force_hash_rollup_;
     ObSEArray<ObTuple<ObRawExpr *, ObRawExpr *>, 8> dup_expr_pairs_;
+    int64_t grouping_dop_;
 
     TO_STRING_KV(K_(can_storage_pushdown),
                  K_(can_basic_pushdown),
@@ -573,7 +575,8 @@ public:
                  K_(distinct_aggr_items),
                  K_(non_distinct_aggr_items),
                  K_(enable_hash_rollup),
-                 K_(force_hash_rollup));
+                 K_(force_hash_rollup),
+                 K_(grouping_dop));
   };
 
   /**
@@ -809,6 +812,21 @@ public:
                           const bool is_from_povit,
                           GroupingOpHelper &groupby_helper);
 
+  int compute_groupby_dop_by_auto_dop(const ObIArray<ObRawExpr*> &group_exprs,
+                                      const ObIArray<ObRawExpr*> &rollup_exprs,
+                                      const GroupingOpHelper &groupby_helper,
+                                      int64_t &dop) const;
+  int inner_compute_three_stage_groupby_dop_by_auto_dop(const ObIArray<ObRawExpr*> &group_exprs,
+                                                        const GroupingOpHelper &groupby_helper,
+                                                        const int64_t server_cnt,
+                                                        int64_t &dop) const;
+  int get_three_stage_groupby_number_of_copies(const ObIArray<ObAggFunRawExpr*> &non_distinct_aggrs,
+                                               const ObIArray<ObAggFunRawExpr*> &distinct_aggrs,
+                                               int64_t &number_of_copies) const;
+  int get_parallel_info_from_candidate_plans(int64_t &server_cnt, int64_t &dop) const;
+  int check_candi_plan_need_calc_dop(bool &need_calc_dop) const;
+  int check_op_need_calc_dop(const ObLogicalOperator *cur_op, bool &need_calc) const;
+
   int calculate_group_distinct_ndv(const ObIArray<ObRawExpr*> &groupby_rollup_exprs, GroupingOpHelper &groupby_helper);
 
   int init_distinct_helper(const ObIArray<ObRawExpr*> &distinct_exprs,
@@ -831,6 +849,10 @@ public:
                                      const ObIArray<ObRawExpr *> &group_exprs,
                                      ObIArray<ObRawExpr *> &pushdown_groupby_columns,
                                      bool &can_push);
+
+  int check_can_scala_storage_pushdown(ObSQLSessionInfo &session_info,
+                                       const ObSelectStmt &stmt,
+                                       bool &can_pushdown);
 
   int check_table_columns_can_storage_pushdown(const uint64_t tenant_id,
                                                const uint64_t table_id,

@@ -20,8 +20,8 @@
 #include "sql/rewrite/ob_predicate_deduce.h"
 #include "share/vector_index/ob_vector_index_util.h"
 #include "sql/rewrite/ob_query_range_define.h"
+#include "sql/engine/px/ob_px_util.h"
 #include "sql/das/iter/ob_das_text_retrieval_eval_node.h"
-
 using namespace oceanbase;
 using namespace sql;
 using namespace oceanbase::common;
@@ -293,13 +293,12 @@ bool ObJoinOrder::is_main_table_use_das(const ObIArray<AccessPath *> &access_pat
   return use_das;
 }
 
-int ObJoinOrder::compute_sharding_info_for_base_paths(ObIArray<AccessPath *> &access_paths,
-                                                      ObIndexInfoCache &index_info_cache)
+int ObJoinOrder::compute_sharding_info_for_base_paths(ObIArray<AccessPath *> &access_paths)
 {
   int ret = OB_SUCCESS;
   // compute path sharding info
   for (int64_t i = 0; OB_SUCC(ret) && i < access_paths.count(); ++i) {
-    if (OB_FAIL(set_sharding_info_for_base_path(access_paths, index_info_cache, i))) {
+    if (OB_FAIL(set_sharding_info_for_base_path(access_paths, i))) {
       LOG_WARN("failed to compute sharding info for base path", K(ret));
     }
   }
@@ -374,7 +373,6 @@ int ObJoinOrder::prune_paths_due_to_parallel(ObIArray<AccessPath *> &access_path
 }
 
 int ObJoinOrder::set_sharding_info_for_base_path(ObIArray<AccessPath *> &access_paths,
-                                                     ObIndexInfoCache &index_info_cache,
                                                      const int64_t cur_idx)
 {
   int ret = OB_SUCCESS;
@@ -417,15 +415,8 @@ int ObJoinOrder::set_sharding_info_for_base_path(ObIArray<AccessPath *> &access_
   } else if (ObGlobalHint::DEFAULT_PARALLEL < path->parallel_
              && (OB_TBL_LOCATION_LOCAL == location_type || OB_TBL_LOCATION_REMOTE == location_type)) {
     sharding_info = opt_ctx->get_distributed_sharding();
-  } else if (OB_FAIL(index_info_cache.get_index_info_entry(path->table_id_,
-                                                           path->index_id_,
-                                                           index_info_entry))) {
-    LOG_WARN("get index info entry failed", K(ret));
-  } else if (OB_ISNULL(index_info_entry)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else {
-    sharding_info = index_info_entry->get_sharding_info();
+    sharding_info = path->strong_sharding_;
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(sharding_info)) {
@@ -1794,6 +1785,7 @@ int ObJoinOrder::process_vec_index_info(const ObDMLStmt *stmt,
   bool vector_index_match = false;
   uint64_t vec_index_id = OB_INVALID_ID;
   ObSQLSessionInfo *session_info = NULL;
+
   if (OB_ISNULL(stmt) || OB_ISNULL(schema_guard = OPT_CTX.get_sql_schema_guard())
     || OB_ISNULL(session_info = OPT_CTX.get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
@@ -1973,6 +1965,8 @@ int ObJoinOrder::create_one_access_path(const uint64_t table_id,
     ap->contain_das_op_ = ap->use_das_;
     ap->is_ordered_by_pk_ = (ref_id == index_id) ? true
         : range_info.get_equal_prefix_count() >= range_info.get_index_column_count();
+    //set strong_sharding_ ignore dop, update sharding by dop in set_sharding_info_for_base_path()
+    ap->strong_sharding_ = index_info_entry->get_sharding_info();
     if (get_plan()->get_stmt()->has_vec_approx() && OB_FAIL(process_vec_index_info(get_plan()->get_stmt(), table_id, ref_id, index_id, *ap))) {
       LOG_WARN("failed to init vec_index_info", K(ret));
     } else if (OB_FAIL(process_index_for_match_expr(table_id, ref_id, index_id, helper, *ap))) {
@@ -4493,7 +4487,8 @@ int ObJoinOrder::get_valid_index_ids(const uint64_t table_id,
     // for use index hint, get index ids from hint.
     ObSEArray<uint64_t, 4> valid_hint_index_list;
     const bool is_link = ObSqlSchemaGuard::is_link_table(stmt, table_id);
-    if (OB_FAIL(get_valid_hint_index_list(*stmt, log_table_hint->index_list_, is_link, schema_guard, helper, valid_hint_index_list))) {
+    if (OB_FAIL(get_valid_hint_index_list(*stmt, log_table_hint->index_list_, is_link,
+                                          table_id, ref_table_id, has_aggr, schema_guard, helper, valid_hint_index_list))) {
       LOG_WARN("failed to get valid hint index list", K(ret));
     } else if (OB_FAIL(valid_index_ids.assign(valid_hint_index_list))) {
       LOG_WARN("failed to assign index ids", K(ret));
@@ -7562,6 +7557,7 @@ int AccessPath::check_and_prepare_estimate_parallel_params(const int64_t cur_min
   ObOptimizerContext *opt_ctx = NULL;
   ObSQLSessionInfo *session_info = NULL;
   ObSEArray<ObAddr, 8> server_list;
+  int64_t dop_limit = ObGlobalHint::UNSET_PARALLEL;
   if (OB_ISNULL(table_partition_info_) ||
       OB_ISNULL(parent_) || OB_ISNULL(parent_->get_plan()) ||
       OB_ISNULL(opt_ctx = &parent_->get_plan()->get_optimizer_context()) ||
@@ -7572,12 +7568,18 @@ int AccessPath::check_and_prepare_estimate_parallel_params(const int64_t cur_min
     LOG_WARN("failed to get sys variable px min granule per slave", K(ret));
   } else if (OB_FAIL(table_partition_info_->get_all_servers(server_list))) {
     LOG_WARN("failed to get all servers", K(ret));
+  } else if (OB_FAIL(get_candidate_server_cnt(*opt_ctx, server_list, server_cnt))) {
+    LOG_WARN("failed to get candidate server cnt", K(ret));
+  } else if (OB_FAIL(get_dop_limit_by_pushdown_limit(dop_limit))) {
+    LOG_WARN("failed to get dop limit by pushdown limit", K(ret));
   } else {
     px_part_gi_min_part_per_dop = std::max(1L, px_part_gi_min_part_per_dop);
     cost_threshold_us = 1000.0 * std::max(10L, opt_ctx->get_parallel_min_scan_time_threshold());
-    server_cnt = server_list.count();
     cur_parallel_degree_limit = opt_ctx->get_parallel_degree_limit(server_cnt);
     const int64_t row_parallel_limit = std::floor(get_phy_query_range_row_count() / ROW_COUNT_THRESHOLD_PER_DOP);
+    if (dop_limit > ObGlobalHint::UNSET_PARALLEL && dop_limit < cur_parallel_degree_limit) {
+      cur_parallel_degree_limit = dop_limit;
+    }
     if (cur_min_parallel_degree > ObGlobalHint::UNSET_PARALLEL && cur_min_parallel_degree < cur_parallel_degree_limit) {
       cur_parallel_degree_limit = cur_min_parallel_degree;
     }
@@ -7591,6 +7593,50 @@ int AccessPath::check_and_prepare_estimate_parallel_params(const int64_t cur_min
       }
     }
     cur_parallel_degree_limit = std::max(1L, cur_parallel_degree_limit);
+  }
+  return ret;
+}
+
+int AccessPath::get_dop_limit_by_pushdown_limit(int64_t &dop_limit) const
+{
+  int ret = OB_SUCCESS;
+  const ObDMLStmt *stmt = NULL;
+  bool need_sort = false;
+  int64_t prefix_pos = 0;
+  const TableItem *table_item = NULL;
+  if (OB_ISNULL(strong_sharding_) || OB_ISNULL(parent_)
+      || OB_ISNULL(parent_->get_plan())
+      || OB_ISNULL(stmt = parent_->get_plan()->get_stmt())
+      || OB_ISNULL(table_item = stmt->get_table_item_by_id(table_id_))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected params", K(ret), K(strong_sharding_), K(parent_), K(stmt), K(table_item));
+  } else if (!stmt->has_limit()
+             || stmt->is_calc_found_rows()
+             || !stmt->is_single_table_stmt()
+             || is_virtual_table(ref_table_id_)
+             || EXTERNAL_TABLE == table_item->table_type_
+             || table_item->is_link_table()
+             || (NULL != table_item->sample_info_ && !table_item->sample_info_->is_no_sample())
+             || !est_cost_info_.postfix_filters_.empty()
+             || !est_cost_info_.table_filters_.empty()) {
+    /* do nothing */
+  } else if (!stmt->get_order_items().empty()
+             && (ordering_.empty() || !has_interesting_order_flag(OrderingFlag::ORDERBY_MATCH))) {
+    /* do nothing */
+  } else if (OB_FAIL(ObOptimizerUtil::check_need_sort(stmt->get_order_items(),
+                                                      ordering_,
+                                                      parent_->get_fd_item_set(),
+                                                      parent_->get_output_equal_sets(),
+                                                      parent_->get_output_const_exprs(),
+                                                      parent_->get_plan()->get_onetime_query_refs(),
+                                                      parent_->get_is_at_most_one_row(),
+                                                      need_sort,
+                                                      prefix_pos))) {
+      LOG_WARN("failed to check if need sort", K(ret));
+  } else if (need_sort) {
+    /* do nothing */
+  } else {
+    dop_limit = strong_sharding_->get_part_cnt();
   }
   return ret;
 }
@@ -8133,6 +8179,53 @@ int AccessPath::compute_is_das_dynamic_part_pruning(const EqualSets &equal_sets,
       can_das_dynamic_part_pruning_ = is_match;
     }
   }
+  return ret;
+}
+
+int AccessPath::get_candidate_server_cnt(const ObOptimizerContext &opt_ctx,
+                                        const ObIArray<ObAddr> &server_list,
+                                        int64_t &server_cnt)
+{
+  int ret = OB_SUCCESS;
+  const ObGlobalHint &global_hint = opt_ctx.get_global_hint();
+  ObPxNodePolicy px_node_policy = opt_ctx.get_px_node_policy();
+  ObPxNodeSelectionMode px_node_selection_mode = opt_ctx.get_px_node_selection_mode();
+  if (px_node_selection_mode == ObPxNodeSelectionMode::SPECIFY_NODE) {
+    server_cnt = global_hint.px_node_hint_.px_node_addrs_.count();
+  } else {
+    switch (px_node_policy) {
+      case ObPxNodePolicy::DATA: {
+        server_cnt = server_list.count();
+        break;
+      }
+      case ObPxNodePolicy::ZONE: {
+        if (OB_FAIL(ObPXServerAddrUtil::get_zone_server_cnt(server_list, server_cnt))) {
+          LOG_WARN("Failed to get zone server cnt", K(ret));
+        }
+        break;
+      }
+      case ObPxNodePolicy::CLUSTER: {
+        if (OB_FAIL(ObPXServerAddrUtil::get_cluster_server_cnt(server_list, server_cnt))) {
+          LOG_WARN("Failed to get cluster server cnt", K(ret));
+        }
+        break;
+      }
+      default: {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected px_node_policy", K(px_node_policy));
+        break;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      // Defensive code: the minimum is set to the count of the server list.
+      server_cnt = std::max(server_cnt, server_list.count());
+      if (px_node_selection_mode == ObPxNodeSelectionMode::SPECIFY_NODE) {
+        server_cnt = std::min(global_hint.px_node_hint_.px_node_count_, server_cnt);
+      }
+    }
+  }
+  LOG_TRACE("get candidate server cnt", K(server_cnt), K(server_list),
+                        K(px_node_policy), K(px_node_selection_mode));
   return ret;
 }
 
@@ -8794,13 +8887,14 @@ int JoinPath::compute_join_path_parallel_and_server_info(ObOptimizerContext *opt
   parallel = ObGlobalHint::DEFAULT_PARALLEL;
   available_parallel = ObGlobalHint::DEFAULT_PARALLEL;
   int64_t px_expected_work_count = 0;
-  const common::ObAddr &local_server_addr = opt_ctx->get_local_server_addr();
   server_cnt = 0;
   server_list.reuse();
-  if (OB_ISNULL(left_path) || OB_ISNULL(right_path)) {
+  if (OB_ISNULL(opt_ctx) || OB_ISNULL(opt_ctx->get_query_ctx())
+      || OB_ISNULL(left_path) || OB_ISNULL(right_path)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(right_path), K(right_path), K(ret));
+    LOG_WARN("get unexpected null", K(opt_ctx), K(right_path), K(right_path), K(ret));
   } else {
+    const common::ObAddr &local_server_addr = opt_ctx->get_local_server_addr();
     LOG_TRACE("compute join path parallel and server info", K(join_dist_algo),
                               K(left_path->parallel_), K(right_path->parallel_),
                               K(left_path->is_single()), K(right_path->is_single()));
@@ -8877,7 +8971,8 @@ int JoinPath::compute_join_path_parallel_and_server_info(ObOptimizerContext *opt
       }
     } else if (DistAlgo::DIST_BROADCAST_NONE == join_dist_algo
                || DistAlgo::DIST_BC2HOST_NONE == join_dist_algo) {
-      parallel = right_path->parallel_;
+      parallel = (has_nl_param && !right_path->is_single() && opt_ctx->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP1))
+                 ? left_path->parallel_ : right_path->parallel_;
       server_cnt = right_path->server_cnt_;
       if (OB_FAIL(server_list.assign(right_path->server_list_))) {
         LOG_WARN("failed to assign server list", K(ret));
@@ -8902,7 +8997,8 @@ int JoinPath::compute_join_path_parallel_and_server_info(ObOptimizerContext *opt
         server_cnt = right_path->server_cnt_;
       }
     } else if (DistAlgo::DIST_PARTITION_NONE == join_dist_algo) {
-      parallel = right_path->parallel_;
+      parallel = (has_nl_param && opt_ctx->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP1))
+                 ? left_path->parallel_ : right_path->parallel_;
       server_cnt = right_path->server_cnt_;
       if (OB_FAIL(server_list.assign(right_path->server_list_))) {
         LOG_WARN("failed to assign server list", K(ret));
@@ -10456,7 +10552,7 @@ int ObJoinOrder::generate_base_table_paths(PathHelper &helper)
     LOG_WARN("failed to pruning unstable access path", K(ret));
   } else if (OB_FAIL(compute_parallel_and_server_info_for_base_paths(access_paths))) {
     LOG_WARN("failed to compute", K(ret));
-  } else if (OB_FAIL(compute_sharding_info_for_base_paths(access_paths, index_info_cache))) {
+  } else if (OB_FAIL(compute_sharding_info_for_base_paths(access_paths))) {
     LOG_WARN("failed to calc sharding info", K(ret));
   } else if (OB_FAIL(compute_cost_and_prune_access_path(helper, access_paths))) {
     LOG_WARN("failed to compute cost and prune access path", K(ret));
@@ -18692,6 +18788,35 @@ int ObJoinOrder::param_values_table_expr(ObIArray<ObRawExpr*> &values_vector,
   return ret;
 }
 
+int ObJoinOrder::check_vec_hint_index_id(const ObDMLStmt &stmt,
+                                         ObSqlSchemaGuard *schema_guard,
+                                         const uint64_t table_id,
+                                         const uint64_t ref_table_id,
+                                         const uint64_t hint_index_id,
+                                         const bool has_aggr,
+                                         bool &is_valid)
+{
+  int ret = OB_SUCCESS;
+  uint64_t vec_index_tid = OB_INVALID_ID;
+  bool vector_index_match = false;
+  ObRawExpr *vector_expr = NULL;
+  is_valid = false;
+  if (!stmt.has_vec_approx()
+      || OB_ISNULL(vector_expr = stmt.get_first_vector_expr())) {
+    // do nothing, not vec index
+  } else if (OB_FAIL(get_vector_index_tid_from_expr(schema_guard, vector_expr, table_id, ref_table_id,
+                                                    has_aggr, vector_index_match, vec_index_tid))) {
+      LOG_WARN("failed to get vector index tid", K(ret));
+  } else if (vec_index_tid == OB_INVALID_ID || vec_index_tid != hint_index_id) {
+    // skip
+  } else {
+    is_valid = true;
+  }
+  LOG_DEBUG("check_valid_vec_hint_index_ids is valid",
+    K(ret), K(is_valid), K(vec_index_tid), K(ref_table_id), K(hint_index_id));
+  return ret;
+}
+
 int ObJoinOrder::add_valid_vec_index_ids(const ObDMLStmt &stmt,
                                         ObSqlSchemaGuard *schema_guard,
                                         const uint64_t table_id,
@@ -19489,6 +19614,9 @@ bool ObJoinOrder::invalid_index_for_vec_pre_filter(const ObTableSchema *index_hi
 int ObJoinOrder::get_valid_hint_index_list(const ObDMLStmt &stmt,
                                            const ObIArray<uint64_t> &hint_index_ids,
                                            const bool is_link_table,
+                                           const uint64_t table_id,
+                                           const uint64_t ref_table_id,
+                                           const bool has_aggr,
                                            ObSqlSchemaGuard *schema_guard,
                                            PathHelper &helper,
                                            ObIArray<uint64_t> &valid_hint_index_ids)
@@ -19510,8 +19638,24 @@ int ObJoinOrder::get_valid_hint_index_list(const ObDMLStmt &stmt,
       LOG_WARN("unexpected nullptr to index hint table schema", K(ret), K(tid));
     } else if (index_hint_table_schema->is_global_index_table() && has_match_expr_on_table) {
       // scan with both global index and fulltext index is not supported yet
-    } else if (stmt.has_vec_approx() && invalid_index_for_vec_pre_filter(index_hint_table_schema)) {
-      // scan with both global index/fts_index/multi_value_index and vector index is not supported yet
+    } else if (stmt.has_vec_approx()) {
+      if (invalid_index_for_vec_pre_filter(index_hint_table_schema)) {
+         // skip
+      } else {
+        if (index_hint_table_schema->is_vec_index()) {
+          bool is_valid = false;
+          if (OB_FAIL(check_vec_hint_index_id(stmt, schema_guard, table_id, ref_table_id,
+                                              index_hint_table_schema->get_table_id(),
+                                              has_aggr, is_valid))) {
+            LOG_WARN("failed to check vec hint index", K(table_id), K(ref_table_id), K(index_hint_table_schema));
+          } else if (!is_valid) {
+          } else if (OB_FAIL(valid_hint_index_ids.push_back(tid))) {
+            LOG_WARN("failed to append valid hint index list", K(ret), K(tid));
+          }
+        } else {
+          // if hint is not vector index but has vec approx, skip
+        }
+      }
     } else if (index_hint_table_schema->is_fts_index()) {
       bool is_valid = true;
       if (OB_FAIL(has_valid_match_filter_on_index(helper, tid, is_valid))) {

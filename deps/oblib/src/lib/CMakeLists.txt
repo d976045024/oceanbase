@@ -291,6 +291,7 @@ ob_set_subtarget(oblib_lib common_mixed
   locale/ob_locale_type.cc
   locale/ob_locale.cpp
   enumset/ob_enum_set_meta.cpp
+  other/recursion.cpp
 )
 
 ob_set_subtarget(oblib_lib lock
@@ -376,6 +377,7 @@ ob_set_subtarget(oblib_lib utility
   utility/ob_proto_trans_util.cpp
   utility/ob_unify_serialize.cpp
   utility/ob_rpc_authentication_utility.cpp
+  utility/ob_hyperloglog.cpp
 )
 
 ob_set_subtarget(oblib_lib ash

@@ -216,7 +216,8 @@ struct ObVecIndexInfo
   ~ObVecIndexInfo() {}
 
   TO_STRING_KV(K_(sort_key), KPC_(topk_limit_expr), KPC_(topk_offset_expr), KPC_(target_vec_column),
-              KPC_(vec_id_column), K_(aux_table_column), K_(aux_table_id), K_(main_table_tid));
+              KPC_(vec_id_column), K_(aux_table_column), K_(aux_table_id), K_(main_table_tid),
+              K_(vec_type), K_(algorithm_type));
   bool need_sort() const { return sort_key_.expr_ != nullptr; }
   void set_vec_algorithm_type(ObVectorIndexAlgorithmType type) { algorithm_type_ = type; }
   ObVectorIndexAlgorithmType get_vec_algorithm_type() const { return algorithm_type_; }
@@ -932,9 +933,11 @@ public:
   int copy_gen_col_range_exprs();
   inline bool need_replace_gen_column() { return !(is_index_scan() && !(get_index_back())); }
   int try_adjust_scan_direction(const ObIArray<OrderItem> &sort_keys);
+  int check_is_dbms_calc_partition_expr(const ObRawExpr &expr, bool &is_true);
 private: // member functions
   //called when index_back_ set
   int pick_out_query_range_exprs();
+  int pick_out_dbms_calc_partition_id_exprs();
   int filter_before_index_back_set();
   virtual int print_outline_data(PlanText &plan_text) override;
   virtual int print_used_hint(PlanText &plan_text) override;

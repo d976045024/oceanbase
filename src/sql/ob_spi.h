@@ -819,6 +819,8 @@ public:
                                           ObIAllocator *allocator,
                                           ObObj *result);
 
+  static int spi_adjust_error_trace(pl::ObPLExecCtx *ctx, int level);
+
   static int spi_set_pl_exception_code(pl::ObPLExecCtx *ctx, int64_t code, bool is_pop_warning_buf, int level);
 
   static int spi_get_pl_exception_code(pl::ObPLExecCtx *ctx, int64_t *code);
@@ -1302,6 +1304,7 @@ private:
   static int store_params_string(pl::ObPLExecCtx *ctx, ObSPIResultSet &spi_result, ParamStore *exec_params);
 
   static int setup_cursor_snapshot_verify_(pl::ObPLCursorInfo *cursor, ObSPIResultSet *spi_result);
+  static int save_unstreaming_cursor_sql(pl::ObPLCursorInfo &cursor, const ObString &sql_text);
 };
 
 struct ObPLSubPLSqlTimeGuard

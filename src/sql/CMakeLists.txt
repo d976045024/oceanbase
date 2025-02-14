@@ -34,6 +34,7 @@ ob_set_subtarget(ob_sql common_mixed
   resolver/mv/ob_mv_provider.cpp
   resolver/mv/ob_mv_printer.cpp
   resolver/mv/ob_mv_dep_utils.cpp
+  resolver/mv/ob_alter_mview_utils.cpp
 )
 
 ob_set_subtarget(ob_sql das
@@ -849,6 +850,8 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_calc_odps_size.cpp
   engine/expr/ob_expr_to_pinyin_tab.cpp
   engine/expr/ob_expr_to_pinyin.cpp
+  engine/expr/ob_expr_url_codec.cpp
+  engine/expr/ob_expr_keyvalue.cpp
   engine/expr/ob_expr_demote_cast.cpp
   engine/expr/ob_expr_array_max.cpp
   engine/expr/ob_expr_array_avg.cpp
@@ -1350,6 +1353,7 @@ ob_set_subtarget(ob_sql resolver_ddl
   resolver/ddl/ob_create_tenant_stmt.cpp
   resolver/ddl/ob_create_standby_tenant_resolver.cpp
   resolver/ddl/ob_create_view_resolver.cpp
+  resolver/ddl/ob_create_wrapped_resolver.cpp
   resolver/ddl/ob_ddl_resolver.cpp
   resolver/ddl/ob_ddl_stmt.cpp
   resolver/ddl/ob_drop_database_resolver.cpp
@@ -1538,6 +1542,12 @@ if(CPP_STANDARD_20)
 endif()
 ob_add_new_object_target(ob_sql ob_sql)
 ob_add_new_object_target(ob_sql_extra ob_sql_extra)
+
+if (DETECT_RECURSION)
+ target_compile_options(ob_sql
+   PRIVATE -finstrument-functions
+ )
+endif()
 
 ob_set_subtarget(ob_sql_simd common
   engine/basic/ob_pushdown_filter_simd.cpp

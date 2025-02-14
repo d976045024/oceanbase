@@ -692,6 +692,7 @@ class Path
                                                    double &cost_threshold_us,
                                                    int64_t &server_cnt,
                                                    int64_t &cur_parallel_degree_limit) const;
+    int get_dop_limit_by_pushdown_limit(int64_t &dop_limit) const;
     int prepare_estimate_parallel(const int64_t pre_parallel,
                                   const int64_t parallel_degree_limit,
                                   const double cost_threshold_us,
@@ -759,6 +760,9 @@ class Path
       return  can_das_dynamic_part_pruning() && NULL != table_partition_info_
               ? table_partition_info_->get_phy_tbl_location_info().get_partition_cnt() : 1;
     }
+    static int get_candidate_server_cnt(const ObOptimizerContext &opt_ctx,
+                                  const ObIArray<ObAddr> &server_list,
+                                  int64_t &server_cnt);
     virtual bool is_index_merge_path() const { return false; }
     TO_STRING_KV(K_(table_id),
                  K_(ref_table_id),
@@ -2189,11 +2193,9 @@ struct NullAwareAntiJoinInfo {
     int generate_values_table_paths();
     int generate_temp_table_paths();
 
-    int compute_sharding_info_for_base_paths(ObIArray<AccessPath *> &access_paths, ObIndexInfoCache &index_info_cache);
+    int compute_sharding_info_for_base_paths(ObIArray<AccessPath *> &access_paths);
 
-    int set_sharding_info_for_base_path(ObIArray<AccessPath *> &access_paths,
-                                            ObIndexInfoCache &index_info_cache,
-                                            const int64_t cur_idx);
+    int set_sharding_info_for_base_path(ObIArray<AccessPath *> &access_paths, const int64_t cur_idx);
     int compute_sharding_info_with_part_info(ObTableLocationType location_type,
                                             ObTablePartitionInfo* table_partition_info,
                                             ObShardingInfo *&sharding_info);
@@ -2879,6 +2881,13 @@ struct NullAwareAntiJoinInfo {
                                 const bool has_aggr,
                                 uint64_t *index_tid_array,
                                 int64_t &size);
+    int check_vec_hint_index_id(const ObDMLStmt &stmt,
+                                ObSqlSchemaGuard *schema_guard,
+                                const uint64_t table_id,
+                                const uint64_t ref_table_id,
+                                const uint64_t hint_index_id,
+                                const bool has_aggr,
+                                bool &is_valid);
     bool invalid_index_for_vec_pre_filter(const ObTableSchema *index_hint_table_schema) const;
     int find_match_expr_info(const ObIArray<MatchExprInfo> &match_expr_infos,
                             ObRawExpr *match_expr,
@@ -3086,6 +3095,9 @@ struct NullAwareAntiJoinInfo {
     int get_valid_hint_index_list(const ObDMLStmt &stmt,
                                   const ObIArray<uint64_t> &hint_index_ids,
                                   const bool is_link_table,
+                                  const uint64_t table_id,
+                                  const uint64_t ref_table_id,
+                                  const bool has_aggr,
                                   ObSqlSchemaGuard *schema_guard,
                                   PathHelper &helper,
                                   ObIArray<uint64_t> &valid_hint_index_ids);

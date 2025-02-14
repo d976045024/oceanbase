@@ -41,6 +41,13 @@ const char *ObLogTableScan::get_name() const
   }
   if (sample_method != SampleInfo::NO_SAMPLE) {
     name = (sample_method == SampleInfo::ROW_SAMPLE) ? "TABLE ROW SAMPLE SCAN" : "TABLE BLOCK SAMPLE SCAN";
+    if (sample_method == SampleInfo::ROW_SAMPLE) {
+      name = "TABLE ROW SAMPLE SCAN";
+    } else if (sample_method == SampleInfo::BLOCK_SAMPLE) {
+      name = "TABLE BLOCK SAMPLE SCAN";
+    } else if (sample_method == SampleInfo::HYBRID_SAMPLE) {
+      name = "TABLE HYBRID SAMPLE SCAN";
+    }
   } else if (is_text_retrieval_scan()) {
     name = use_das() ? "DISTRIBUTED TEXT RETRIEVAL SCAN" : "TEXT RETRIEVAL SCAN";
   } else if (is_pre_vec_idx_scan()) {
@@ -1187,14 +1194,14 @@ int ObLogTableScan::generate_necessary_rowkey_and_partkey_exprs()
   bool has_lob_column = false;
   ObSqlSchemaGuard *schema_guard = NULL;
   const ObTableSchema *table_schema = NULL;
-  bool is_heap_table = false;
+  bool is_table_without_pk = false;
   if (OB_ISNULL(get_stmt()) || OB_ISNULL(get_plan()) ||
       OB_ISNULL(schema_guard = get_plan()->get_optimizer_context().get_sql_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema(ref_table_id_, table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
-  } else if (table_schema != NULL && FALSE_IT(is_heap_table = table_schema->is_heap_table())) {
+  } else if (table_schema != NULL && FALSE_IT(is_table_without_pk = table_schema->is_table_without_pk())) {
   } else if (OB_FAIL(get_stmt()->has_lob_column(table_id_, has_lob_column))) {
     LOG_WARN("failed to check whether stmt has lob column", K(ret));
   } else if (OB_FAIL(get_mbr_column_exprs(table_id_, spatial_exprs_))) {
@@ -1212,7 +1219,7 @@ int ObLogTableScan::generate_necessary_rowkey_and_partkey_exprs()
   } else if (use_index_merge()
       && OB_FAIL(extract_index_merge_access_exprs(domain_exprs_))) {
     LOG_WARN("failed to extract index merge access exprs", K(ret));
-  } else if (is_heap_table && is_index_global_ && index_back_ &&
+  } else if (is_table_without_pk && is_index_global_ && index_back_ &&
              OB_FAIL(get_part_column_exprs(table_id_, ref_table_id_, part_exprs_))) {
     LOG_WARN("failed to get part column exprs", K(ret));
   } else if ((has_lob_column || index_back_ || has_func_lookup()) &&
@@ -1374,6 +1381,8 @@ int ObLogTableScan::set_table_scan_filters(const common::ObIArray<ObRawExpr *> &
     LOG_WARN("failed to get exprs", K(ret));
   } else if (OB_FAIL(pick_out_query_range_exprs())) {
     LOG_WARN("failed to pick out query range exprs", K(ret));
+  } else if (OB_FAIL(pick_out_dbms_calc_partition_id_exprs())) {
+    LOG_WARN("failed to pick out dbms calc partiton id exprs", K(ret));
   } else if (OB_FAIL(pick_out_startup_filters())) {
     LOG_WARN("failed to pick out startup filters", K(ret));
   }
@@ -1560,6 +1569,37 @@ int ObLogTableScan::pick_out_query_range_exprs()
   return ret;
 }
 
+int ObLogTableScan::pick_out_dbms_calc_partition_id_exprs()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(get_plan())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
+  } else if (get_plan()->get_optimizer_context().get_global_hint().has_dbms_stats_hint()) {
+    ObArray<ObRawExpr *> filter_exprs;
+    if (OB_FAIL(filter_exprs.assign(filter_exprs_))) {
+      LOG_WARN("assign filter exprs failed", K(ret));
+    } else {
+      filter_exprs_.reset();
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < filter_exprs.count(); ++i) {
+      ObRawExpr *expr = filter_exprs.at(i);
+      bool is_dbms_calc_part_expr = false;
+      if (OB_ISNULL(expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
+      } else if (OB_FAIL(check_is_dbms_calc_partition_expr(*expr, is_dbms_calc_part_expr))) {
+        LOG_WARN("failed to check is dbms calc partition expr", K(ret));
+      } else if (is_dbms_calc_part_expr) {
+        // do nothing
+      } else if (OB_FAIL(filter_exprs_.push_back(expr))) {
+        LOG_WARN("failed to push back filter exprs", K(ret));
+      }
+    } //end for
+  }
+  return ret;
+}
+
 int ObLogTableScan::init_calc_part_id_expr()
 {
   int ret = OB_SUCCESS;
@@ -1597,7 +1637,7 @@ int ObLogTableScan::init_calc_part_id_expr()
       LOG_WARN("failed to add skipped exprs", K(ret));
     } else if (OB_FAIL(copier.copy(calc_part_id_expr_, calc_part_id_expr_))) {
       LOG_WARN("failed to copy exprs", K(ret));
-    } else if (!table_schema->is_heap_table() &&
+    } else if (table_schema->is_table_with_pk() &&
                OB_NOT_NULL(calc_part_id_expr_) &&
                OB_FAIL(replace_gen_column(get_plan(), calc_part_id_expr_, calc_part_id_expr_))) {
       LOG_WARN("failed to replace gen column", K(ret));
@@ -3409,7 +3449,9 @@ int ObLogTableScan::generate_auto_split_filter()
       || OB_ISNULL(schema_guard = get_plan()->get_optimizer_context().get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get invalid argument", K(ret), K(ref_table_id_));
-  } else if (get_contains_fake_cte() || is_virtual_table(table_id)) {
+  } else if (get_contains_fake_cte()
+             || is_virtual_table(table_id)
+             || is_external_object_id(table_id)) {
     // skip mock table and virtual table
   } else if (OB_FAIL(schema_guard->get_table_schema(
       session->get_effective_tenant_id(),
@@ -5154,6 +5196,30 @@ int ObLogTableScan::try_adjust_scan_direction(const ObIArray<OrderItem> &sort_ke
     }
     if (OB_SUCC(ret) && found) {
       set_scan_direction(first_sortkey.order_type_);
+    }
+  }
+  return ret;
+}
+
+int ObLogTableScan::check_is_dbms_calc_partition_expr(const ObRawExpr &expr, bool &is_true)
+{
+  int ret = OB_SUCCESS;
+  is_true = false;
+  if (expr.get_expr_type() == T_OP_EQ) {
+    const ObRawExpr *left_expr = ObRawExprUtils::skip_implicit_cast(expr.get_param_expr(0));
+    const ObRawExpr *right_expr = ObRawExprUtils::skip_implicit_cast(expr.get_param_expr(1));
+    uint64_t ref_table_id = is_index_global_ ? index_table_id_ : ref_table_id_;
+    if (OB_ISNULL(left_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null", K(ret));
+    } else if (left_expr->get_expr_type() == T_FUN_SYS_CALC_PARTITION_ID &&
+               left_expr->get_extra() == ref_table_id &&
+               right_expr->is_const_expr()) {
+      is_true = true;
+    } else if (right_expr->get_expr_type() == T_FUN_SYS_CALC_PARTITION_ID &&
+               right_expr->get_extra() == ref_table_id &&
+               left_expr->is_const_expr()) {
+      is_true = true;
     }
   }
   return ret;

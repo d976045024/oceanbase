@@ -1359,7 +1359,7 @@ int ObDDLUtil::generate_order_by_str_for_mview(const ObTableSchema &container_ta
   int ret = OB_SUCCESS;
   rowkey_column_sql_string.reset();
   const ObRowkeyInfo &rowkey_info = container_table_schema.get_rowkey_info();
-  if (container_table_schema.is_heap_table()) {
+  if (container_table_schema.is_table_without_pk()) {
     /* do nothing */
   } else if (OB_UNLIKELY(rowkey_info.get_size() < 1)) {
     ret = OB_ERR_UNEXPECTED;
@@ -3423,6 +3423,12 @@ int ObDDLUtil::batch_check_tablet_checksum(
 bool ObDDLUtil::use_idempotent_mode(const int64_t data_format_version)
 {
   return (GCTX.is_shared_storage_mode() && data_format_version >= DATA_VERSION_4_3_3_0);
+}
+
+bool ObDDLUtil::need_rescan_column_store(const int64_t data_format_version)
+{
+  return true; // force rescan now
+  // return GCTX.is_shared_storage_mode() || data_format_version <= DATA_VERSION_4_3_4_0; //TODO@wenqu: fix data version
 }
 
 int ObDDLUtil::init_macro_block_seq(const int64_t parallel_idx, blocksstable::ObMacroDataSeq &start_seq)

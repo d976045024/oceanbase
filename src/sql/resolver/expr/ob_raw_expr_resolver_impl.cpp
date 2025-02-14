@@ -2375,34 +2375,11 @@ int ObRawExprResolverImpl::check_pl_variable(ObQualifiedName &q_name, bool &is_p
   if (NULL == ctx_.secondary_namespace_) {
     // do nothing ...
   } else {
-
-class ObPLDependencyGuard
-{
-public:
-  ObPLDependencyGuard(pl::ObPLDependencyTable *dependency_table)
-    : dependency_table_(dependency_table), count_(0) {
-    if (OB_NOT_NULL(dependency_table_)) {
-      count_ = dependency_table_->count();
-    }
-  }
-  ~ObPLDependencyGuard() {
-    if (OB_NOT_NULL(dependency_table_)) {
-      while (dependency_table_->count() > count_) {
-        dependency_table_->pop_back();
-      }
-    }
-  }
-private:
-  pl::ObPLDependencyTable *dependency_table_;
-  int64_t count_;
-};
-
     SET_LOG_CHECK_MODE();
     CK(OB_NOT_NULL(ctx_.secondary_namespace_->get_external_ns()));
     if (OB_SUCC(ret)) {
       ObArray<ObQualifiedName> fake_columns;
       ObArray<ObRawExpr*> fake_exprs;
-      ObPLDependencyGuard dep_guard(ctx_.secondary_namespace_->get_external_ns()->get_dependency_table());
       if (OB_FAIL(ObResolverUtils::resolve_external_symbol(allocator,
                                                            expr_factory,
                                                            ctx_.secondary_namespace_->get_external_ns()->get_resolve_ctx().session_info_,
@@ -2415,6 +2392,7 @@ private:
                                                            fake_exprs,
                                                            var,
                                                            &ctx_.secondary_namespace_->get_external_ns()->get_resolve_ctx().package_guard_,
+                                                           ctx_.param_list_,
                                                            false,/*is_prepare_protocol*/
                                                            true,/*is_check_mode*/
                                                            ctx_.current_scope_ != T_PL_SCOPE /*is_sql_scope*/))) {
@@ -3101,7 +3079,6 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
                                              enable_decimal_int, // FIXME: enable decimal int
                                              compat_type,
                                              enable_mysql_compatible_dates,
-                                             session_info->get_local_ob_enable_plan_cache(),
                                              nullptr != ctx_.secondary_namespace_,
                                              ctx_.formalize_const_int_prec_))) {
     LOG_WARN("failed to resolve const", K(ret));
@@ -5490,7 +5467,34 @@ int ObRawExprResolverImpl::process_group_aggr_node(const ParseNode *node, ObRawE
 
     if (OB_SUCC(ret)) {
       //解析order by
-      if (NULL != node->children_[2]) {
+      if (is_mysql_mode() && T_FUN_GROUP_PERCENTILE_CONT == node->type_) {
+        const ParseNode *column_node = node->children_[2];
+        if (OB_ISNULL(column_node)) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("column_node is null or invalid", KP(column_node), K(column_node->type_));
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "percentile_cont");
+        } else if (OB_UNLIKELY(column_node->type_ != T_COLUMN_REF)) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("percentile_cont only support column", K(ret), K(node));
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "percentile_cont");
+        } else {
+          OrderItem order_item;
+          order_item.order_type_ = NULLS_FIRST_ASC;
+          if (OB_FAIL(SMART_CALL(recursive_resolve(column_node->children_[2], order_item.expr_)))) {
+            LOG_WARN("fail to recursive resolve order item expr", K(ret));
+          }
+          OZ(not_row_check(order_item.expr_));
+          if (OB_FAIL(ret)) {
+          } else if (OB_FAIL(agg_expr->add_order_item(order_item))) {
+            LOG_WARN("fail to add order item to agg expr", K(ret));
+          } else {
+            if (T_FUN_GROUP_PERCENTILE_CONT == node->type_
+                 && OB_FAIL(reset_aggr_sort_nulls_first(agg_expr->get_order_items_for_update()))) {
+              LOG_WARN("failed to reset median aggr sort direction", K(ret), K(node));
+            }
+          }
+        }
+      } else if (NULL != node->children_[2]) {
         const ParseNode *order_by_node = node->children_[2];
         if (OB_ISNULL(order_by_node)
             || OB_UNLIKELY(order_by_node->type_ != T_ORDER_BY)

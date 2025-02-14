@@ -391,6 +391,7 @@ void ObColumnParam::reset()
   is_gen_col_udf_expr_ = false;
   is_hidden_ = false;
   lob_chunk_size_ = OB_DEFAULT_LOB_CHUNK_SIZE;
+  is_data_table_rowkey_ = false;
 }
 
 void ObColumnParam::destroy()
@@ -449,7 +450,8 @@ OB_DEF_SERIALIZE(ObColumnParam)
               is_gen_col_udf_expr_,
               is_nullable_for_read_,
               is_hidden_,
-              lob_chunk_size_);
+              lob_chunk_size_,
+              is_data_table_rowkey_);
   return ret;
 }
 
@@ -491,6 +493,7 @@ OB_DEF_DESERIALIZE(ObColumnParam)
     }
   }
   OB_UNIS_DECODE(lob_chunk_size_);
+  OB_UNIS_DECODE(is_data_table_rowkey_);
 
   return ret;
 }
@@ -512,7 +515,8 @@ OB_DEF_SERIALIZE_SIZE(ObColumnParam)
               is_virtual_gen_col_,
               is_gen_col_udf_expr_,
               is_hidden_,
-              lob_chunk_size_);
+              lob_chunk_size_,
+              is_data_table_rowkey_);
   return len;
 }
 
@@ -531,6 +535,7 @@ int ObColumnParam::assign(const ObColumnParam &other)
     is_gen_col_udf_expr_= other.is_gen_col_udf_expr_;
     is_hidden_ = other.is_hidden_;
     lob_chunk_size_ = other.lob_chunk_size_;
+    is_data_table_rowkey_ = other.is_data_table_rowkey_;
     if (OB_FAIL(deep_copy_obj(other.cur_default_value_, cur_default_value_))) {
       LOG_WARN("Fail to deep copy cur_default_value, ", K(ret), K(cur_default_value_));
     } else if (OB_FAIL(deep_copy_obj(other.orig_default_value_, orig_default_value_))) {
@@ -625,7 +630,8 @@ ObTableParam::ObTableParam(ObIAllocator &allocator)
     is_column_replica_table_(false),
     is_vec_index_(false),
     is_partition_table_(false),
-    is_normal_cgs_at_the_end_(false)
+    is_normal_cgs_at_the_end_(false),
+    is_mlog_table_(false)
 {
   reset();
 }
@@ -659,6 +665,7 @@ void ObTableParam::reset()
   is_vec_index_ = false;
   is_partition_table_ = false;
   is_normal_cgs_at_the_end_ = false;
+  is_mlog_table_ = false;
 }
 
 OB_DEF_SERIALIZE(ObTableParam)
@@ -711,6 +718,9 @@ OB_DEF_SERIALIZE(ObTableParam)
   }
   if (OB_SUCC(ret) && is_fts_index_) {
     OB_UNIS_ENCODE(parser_properties_);
+  }
+  if (OB_SUCC(ret)) {
+    OB_UNIS_ENCODE(is_mlog_table_);
   }
   return ret;
 }
@@ -820,6 +830,9 @@ OB_DEF_DESERIALIZE(ObTableParam)
       LOG_WARN("Fail to ccopy parser name ", K(ret), K_(parser_properties), K(tmp_parser_properties));
     }
   }
+  if (OB_SUCC(ret)) {
+    LST_DO_CODE(OB_UNIS_DECODE, is_mlog_table_);
+  }
   return ret;
 }
 
@@ -879,6 +892,10 @@ OB_DEF_SERIALIZE_SIZE(ObTableParam)
   }
   if (OB_SUCC(ret) && is_fts_index_) {
     OB_UNIS_ADD_LEN(parser_properties_);
+  }
+  if (OB_SUCC(ret)) {
+    LST_DO_CODE(OB_UNIS_ADD_LEN,
+                is_mlog_table_);
   }
   return len;
 }
@@ -1433,12 +1450,12 @@ int ObTableParam::construct_lob_locator_param(const ObTableSchema &table_schema,
   share::schema::ObColumnParam *col_param = nullptr;
   use_lob_locator = false;
   bool has_row_id = true;
+  const int64_t rowkey_count = table_schema.get_rowkey_info().get_size();
   if (is_use_lob_locator_v2) {
-    for (int64_t i = 0; OB_SUCC(ret) && !use_lob_locator && i < access_projector.count(); i++) {
-      int32_t idx = access_projector.at(i);
-      if (OB_ISNULL(col_param = storage_project_columns.at(idx))) {
+    for (int64_t i = 0; OB_SUCC(ret) && !use_lob_locator && i < storage_project_columns.count(); i++) {
+      if (OB_ISNULL(col_param = storage_project_columns.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected null col param", K(ret), K(idx), K(storage_project_columns));
+        LOG_WARN("Unexpected null col param", K(ret), K(i), K(storage_project_columns));
       } else {
         ObObjType type = col_param->get_meta_type().get_type();
         use_lob_locator = is_lob_storage(type);
@@ -1450,18 +1467,17 @@ int ObTableParam::construct_lob_locator_param(const ObTableSchema &table_schema,
     if (table_schema.is_sys_table()
         || table_schema.is_sys_view()
         || table_schema.is_vir_table()
-        || (table_schema.get_rowkey_info().get_size() == 0)
+        || rowkey_count == 0
         || lib::is_mysql_mode()) {
       has_row_id = false; // need lob locator without rowid
       rowid_version = ObURowIDData::INVALID_ROWID_VERSION;
     }
   } else {
     if (!(table_schema.is_sys_table() || table_schema.is_sys_view() || table_schema.is_vir_table())) {
-      for (int64_t i = 0; OB_SUCC(ret) && !use_lob_locator && i < access_projector.count(); i++) {
-        int32_t idx = access_projector.at(i);
-        if (OB_ISNULL(col_param = storage_project_columns.at(idx))) {
+      for (int64_t i = 0; OB_SUCC(ret) && !use_lob_locator && i < storage_project_columns.count(); i++) {
+        if (OB_ISNULL(col_param = storage_project_columns.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected null col param", K(ret), K(idx), K(storage_project_columns));
+          LOG_WARN("Unexpected null col param", K(ret), K(i), K(storage_project_columns));
         } else {
           use_lob_locator = col_param->get_meta_type().get_type() == ObLongTextType;
         }
@@ -1470,7 +1486,7 @@ int ObTableParam::construct_lob_locator_param(const ObTableSchema &table_schema,
     // Virtual table may not contain primary key columns, i.e. TENANT_VIRTUAL_SESSION_VARIABLE.
     // When access such virtual table, get_column_ids_serialize_to_rowid may return failure because
     // of the null rowkey info. So here skip the lob locator.
-    if (use_lob_locator && 0 == table_schema.get_rowkey_info().get_size()) {
+    if (use_lob_locator && 0 == rowkey_count) {
       use_lob_locator = false;
     }
   }
@@ -1504,7 +1520,7 @@ int ObTableParam::construct_lob_locator_param(const ObTableSchema &table_schema,
           LOG_WARN("column which rowid dependent is not exist",
                    K(rowid_col_ids.at(i)), K(rowid_col_ids), K(ret));
         }
-        if (table_schema.is_heap_table()) {
+        if (table_schema.is_table_without_pk()) {
           rowid_version = table_schema.is_extended_rowid_mode() ? ObURowIDData::EXT_HEAP_TABLE_ROWID_VERSION : ObURowIDData::HEAP_TABLE_ROWID_VERSION;
         } else {
           rowid_version = common::ObURowIDData::LOB_NO_PK_ROWID_VERSION;
@@ -1611,7 +1627,8 @@ int64_t ObTableParam::to_string(char *buf, const int64_t buf_len) const
        K_(parser_properties),
        K_(is_vec_index),
        K_(is_column_replica_table),
-       K_(is_normal_cgs_at_the_end));
+       K_(is_normal_cgs_at_the_end),
+       K_(is_mlog_table));
   J_OBJ_END();
 
   return pos;

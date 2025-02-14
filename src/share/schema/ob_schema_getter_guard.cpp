@@ -2074,6 +2074,8 @@ int ObSchemaGetterGuard::get_table_schema(
   } else if (is_cte_table(table_id)) {
     // fake table is only used in sql execution process and doesn't have schema.
     // We should avoid error in such situation.
+  } else if (is_external_object_id(table_id)) {
+    // do nothing
   } else if (OB_FAIL(check_tenant_schema_guard(tenant_id))) {
     LOG_WARN("fail to check tenant schema guard", KR(ret), K(tenant_id), K_(tenant_id));
   } else if (OB_FAIL(get_schema(TABLE_SCHEMA,
@@ -3857,7 +3859,8 @@ int ObSchemaGetterGuard::get_schema_version(
     const ObSchemaType schema_type,
     const uint64_t tenant_id,
     const uint64_t schema_id,
-    int64_t &schema_version)
+    int64_t &schema_version,
+    uint64_t *schema_belong_db_id)
 {
   int ret = OB_SUCCESS;
   schema_version = OB_INVALID_VERSION;
@@ -3881,6 +3884,10 @@ int ObSchemaGetterGuard::get_schema_version(
         LOG_WARN("get "#SCHEMA" schema failed", KR(ret), K(tenant_id), K(schema_id));     \
       } else if (OB_NOT_NULL(schema)) {                                         \
         schema_version = schema->get_schema_version();                     \
+      }
+#define GET_DATABASE_ID()  \
+      if (OB_SUCC(ret) && OB_NOT_NULL(schema_belong_db_id) && OB_NOT_NULL(schema)) {  \
+        *schema_belong_db_id = schema->get_database_id();   \
       }
     switch (schema_type) {
     case TENANT_SCHEMA : {
@@ -3915,13 +3922,18 @@ int ObSchemaGetterGuard::get_schema_version(
         if (is_cte_table(schema_id)) {
           // fake table, we should avoid error in such situation.
           schema_version = OB_INVALID_VERSION;
+        } else if (is_external_object_id(schema_id)) {
+          uint64_t schema_id = OB_ALL_VIRTUAL_PROCESSLIST_TID;
+          GET_SCHEMA_VERSION(table, ObSimpleTableSchemaV2);
         } else {
           GET_SCHEMA_VERSION(table, ObSimpleTableSchemaV2);
+          GET_DATABASE_ID();
         }
         break;
       }
     case SYNONYM_SCHEMA : {
         GET_SCHEMA_VERSION(synonym, ObSimpleSynonymSchema);
+        GET_DATABASE_ID();
         break;
       }
     case PACKAGE_SCHEMA : {
@@ -3937,18 +3949,22 @@ int ObSchemaGetterGuard::get_schema_version(
             LOG_WARN("get trigger schema failed", KR(ret), K(tenant_id), K(trigger_id));
           } else if (OB_NOT_NULL(schema)) {
             schema_version = schema->get_schema_version();
+            GET_DATABASE_ID();
           }
         } else {
           GET_SCHEMA_VERSION(package, ObSimplePackageSchema);
+          GET_DATABASE_ID();
         }
         break;
       }
     case ROUTINE_SCHEMA : {
         GET_SCHEMA_VERSION(routine, ObSimpleRoutineSchema);
+        GET_DATABASE_ID();
         break;
       }
     case UDT_SCHEMA : {
         GET_SCHEMA_VERSION(udt, ObSimpleUDTSchema);
+        GET_DATABASE_ID();
         break;
     }
     case UDF_SCHEMA : {
@@ -3957,6 +3973,7 @@ int ObSchemaGetterGuard::get_schema_version(
       }
     case SEQUENCE_SCHEMA : {
         GET_SCHEMA_VERSION(sequence, ObSequenceSchema);
+        GET_DATABASE_ID();
         break;
       }
     case SYS_VARIABLE_SCHEMA : {
@@ -4019,6 +4036,7 @@ int ObSchemaGetterGuard::get_schema_version(
     }
     case TRIGGER_SCHEMA: {
       GET_SCHEMA_VERSION(trigger, ObSimpleTriggerSchema);
+      GET_DATABASE_ID();
       break;
     }
     case DBLINK_SCHEMA : {
@@ -6992,6 +7010,8 @@ int ObSchemaGetterGuard::get_simple_table_schema(
   } else if (is_cte_table(table_id)) {
     // fake table is only used in sql execution process and doesn't have schema.
     // We should avoid error in such situation.
+  } else if (is_external_object_id(table_id)) {
+    // do nothing
   } else if (OB_FAIL(check_tenant_schema_guard(tenant_id))) {
     LOG_WARN("fail to check tenant schema guard", KR(ret), K(tenant_id), K(tenant_id_));
   } else if (OB_FAIL(get_schema_mgr(tenant_id, mgr))) {

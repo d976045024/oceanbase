@@ -440,12 +440,13 @@ int ObInfoSchemaColumnsTable::get_type_str(
     const ObAccuracy &accuracy,
     const common::ObIArray<ObString> &type_info,
     const int16_t default_length_semantics, int64_t &pos,
-    const uint64_t sub_type)
+    const uint64_t sub_type,
+    const bool is_string_lob)
 {
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ob_sql_type_str(obj_meta, accuracy, type_info, default_length_semantics,
-                              column_type_str_, column_type_str_len_, pos, sub_type))) {
+                              column_type_str_, column_type_str_len_, pos, sub_type, is_string_lob))) {
     if (OB_MAX_SYS_PARAM_NAME_LENGTH == column_type_str_len_ && OB_SIZE_OVERFLOW == ret) {
       void *tmp_ptr = NULL;
       if (OB_UNLIKELY(NULL == (tmp_ptr = static_cast<char *>(allocator_->realloc(
@@ -466,7 +467,7 @@ int ObInfoSchemaColumnsTable::get_type_str(
         column_type_str_ = static_cast<char *>(tmp_ptr);
         column_type_str_len_ = OB_MAX_EXTENDED_TYPE_INFO_LENGTH;
         ret = ob_sql_type_str(obj_meta, accuracy, type_info, default_length_semantics,
-                              column_type_str_, column_type_str_len_, pos, sub_type);
+                              column_type_str_, column_type_str_len_, pos, sub_type, is_string_lob);
       }
     }
   }
@@ -627,7 +628,8 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
                                         column_schema->get_data_type(),
                                         column_schema->get_collation_type(),
                                         column_schema->get_extended_type_info(),
-                                        column_schema->get_geo_type()))) {
+                                        column_schema->get_geo_type(),
+                                        column_schema->is_string_lob()))) {
               SERVER_LOG(WARN,"fail to get data type str",K(ret), K(column_schema->get_data_type()));
             } else {
               ObString type_val(column_type_str_len_,
@@ -746,7 +748,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
                                      column_schema->get_accuracy(),
                                      column_schema->get_extended_type_info(),
                                      default_length_semantics,
-                                     pos, sub_type))) {
+                                     pos, sub_type, column_schema->is_string_lob()))) {
               SERVER_LOG(WARN,"fail to get column type str",K(ret), K(column_schema->get_data_type()));
             } else if (column_schema->is_zero_fill()) {
              // zerofill, only for int, float, decimal
@@ -803,6 +805,32 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
             } else if (column_schema->is_stored_generated_column()) {
               extra = ObString::make_string("STORED GENERATED");
             }
+
+            if (OB_SUCC(ret) && lib::is_mysql_mode() && column_schema->is_invisible_column()) {
+              int64_t append_len = sizeof("INVISIBLE");
+              int64_t cur_len = extra.length();
+
+              if (cur_len > 0) {
+                append_len += 1;
+              }
+              int64_t buf_len = cur_len + append_len;
+
+              char *buf = NULL;
+              if (OB_ISNULL(buf = static_cast<char *>(allocator_->alloc(buf_len)))) {
+                ret = OB_ALLOCATE_MEMORY_FAILED;
+                SERVER_LOG(WARN, "fail to allocate memory", K(ret));
+              } else if (FALSE_IT(MEMCPY(buf, extra.ptr(), cur_len))) {
+              } else if (cur_len == 0
+                         && OB_FAIL(databuff_printf(buf, buf_len, cur_len, "%s", "INVISIBLE"))) {
+                SHARE_SCHEMA_LOG(WARN, "fail to print on Mysql invisible column", K(ret));
+              } else if (cur_len > 0
+                         && OB_FAIL(databuff_printf(buf, buf_len, cur_len, "%s", " INVISIBLE"))) {
+                SHARE_SCHEMA_LOG(WARN, "fail to print on Mysql invisible column", K(ret));
+              } else {
+                extra = ObString(buf_len, buf);
+              }
+            }
+
             cells[cell_idx].set_varchar(extra);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
@@ -1108,7 +1136,8 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
                                         column_attributes.result_type_.get_type(),
                                         ObCharset::get_default_collation(ObCharset::get_default_charset()),
                                         extend_type_info,
-                                        geo_sub_type))) {
+                                        geo_sub_type,
+                                        column_attributes.is_string_lob_))) {
               SERVER_LOG(WARN,"fail to get data type str",K(ret), K(column_attributes.type_));
             } else {
               ObString type_val(column_type_str_len_,

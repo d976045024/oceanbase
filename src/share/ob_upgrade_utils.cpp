@@ -18,6 +18,7 @@
 #include "src/pl/ob_pl.h"
 #include "share/stat/ob_dbms_stats_maintenance_window.h"
 #include "share/ncomp_dll/ob_flush_ncomp_dll_task.h"
+#include "rootserver/ob_tenant_ddl_service.h"
 
 namespace oceanbase
 {
@@ -529,7 +530,7 @@ int ObUpgradeUtils::upgrade_sys_stat(
     LOG_WARN("fail to init sys stat", KR(ret), K(tenant_id));
   } else if (OB_FAIL(filter_sys_stat(sql_client, tenant_id, sys_stat))) {
     LOG_WARN("fail to filter sys stat", KR(ret), K(tenant_id), K(sys_stat));
-  } else if (OB_FAIL(ObDDLOperator::replace_sys_stat(tenant_id, sys_stat, sql_client))) {
+  } else if (OB_FAIL(ObTenantDDLService::replace_sys_stat(tenant_id, sys_stat, sql_client))) {
     LOG_WARN("fail to add sys stat", KR(ret), K(tenant_id), K(sys_stat));
   } else {
     LOG_INFO("[UPGRADE] upgrade sys stat", KR(ret), K(tenant_id), K(sys_stat));
@@ -1760,6 +1761,45 @@ int ObUpgradeFor4350Processor::post_upgrade_for_optimizer_stats()
 }
 
 /* =========== 4350 upgrade processor end ============= */
+
+/* =========== 4351 upgrade processor start ============= */
+int ObUpgradeFor4351Processor::post_upgrade()
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(check_inner_stat())) {
+    LOG_WARN("fail to check inner stat", KR(ret));
+  } else if (OB_FAIL(post_upgrade_for_optimizer_stats())) {
+    LOG_WARN("fail to post upgrade for optimizer stats", KR(ret));
+  }
+  return ret;
+}
+
+int ObUpgradeFor4351Processor::post_upgrade_for_optimizer_stats()
+{
+  int ret = OB_SUCCESS;
+  ObSqlString extra_stats_perfs_sql;
+  int64_t affected_rows = 0;
+  bool is_primary_tenant = false;
+  if (sql_proxy_ == NULL) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql_proxy is null", K(ret), K(tenant_id_));
+  } else if (OB_FAIL(ObAllTenantInfoProxy::is_primary_tenant(sql_proxy_, tenant_id_, is_primary_tenant))) {
+    LOG_WARN("check is standby tenant failed", K(ret), K(tenant_id_));
+  } else if (!is_primary_tenant) {
+    LOG_INFO("tenant isn't primary standby, no refer to gather stats, skip", K(tenant_id_));
+  } else if (OB_FAIL(ObDbmsStatsPreferences::get_extra_stats_perfs_for_upgrade_4351(extra_stats_perfs_sql))) {
+    LOG_WARN("failed to get extra stats perfs for upgrade", K(ret));
+  } else if (OB_FAIL(sql_proxy_->write(tenant_id_, extra_stats_perfs_sql.ptr(), affected_rows))) {
+    LOG_WARN("failed to write", K(ret));
+  }
+  if (OB_FAIL(ret)) {
+    LOG_WARN("[UPGRADE] post upgrade for optimizer stats failed", KR(ret), K_(tenant_id));
+  } else {
+    LOG_INFO("[UPGRADE] post upgrade for optimizer stats succeed", K_(tenant_id));
+  }
+  return ret;
+}
+/* =========== 4351 upgrade processor end ============= */
 
 } // end share
 } // end oceanbase

@@ -450,11 +450,11 @@ int ObTransformUtils::is_columns_unique(const ObIArray<ObRawExpr *> &exprs,
       LOG_WARN("failed to check rowkey", K(ret));
     //new heap table not add partition key in rowkey and the tablet id is unique in partition,
     //we need check partition key
-    } else if (is_unique && table_schema->is_heap_table() &&
+    } else if (is_unique && table_schema->is_table_without_pk() &&
                table_schema->get_partition_key_info().is_valid() &&
                OB_FAIL(exprs_has_unique_subset(exprs, table_schema->get_partition_key_info(), is_unique))) {
       LOG_WARN("failed to check rowkey", K(ret));
-    } else if (is_unique && table_schema->is_heap_table() &&
+    } else if (is_unique && table_schema->is_table_without_pk() &&
                table_schema->get_subpartition_key_info().is_valid() &&
                OB_FAIL(exprs_has_unique_subset(exprs, table_schema->get_subpartition_key_info(), is_unique))) {
       LOG_WARN("failed to check rowkey", K(ret));
@@ -5883,7 +5883,7 @@ int ObTransformUtils::generate_unique_key_for_basic_table(ObTransformerCtx *ctx,
     LOG_WARN("table schema is null", K(ret), K(table_schema));
   //new heap table not add partition key in rowkey and the tablet id is unique in partition,
   //we need add partition key to ensure the output unique.
-  } else if (table_schema->is_heap_table() &&
+  } else if (table_schema->is_table_without_pk() &&
              OB_FAIL(add_part_column_exprs_for_heap_table(stmt, table_schema,
                                                           item->table_id_, unique_keys))) {
     LOG_WARN("failed to add part column exprs for heap table", K(ret));
@@ -10660,6 +10660,7 @@ int ObTransformUtils::replace_with_groupby_exprs(ObSelectStmt *select_stmt,
         for (int64_t k = 0; OB_SUCC(ret) && !is_existed && k < groupby_exprs.count(); k++) {
           check_context.param_expr_.reset();
           check_context.equal_param_info_.reset();
+          check_context.ora_numeric_cmp_for_grouping_items_ = true;
           if (OB_ISNULL(groupby_exprs.at(k))) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("got an unexpected null", K(ret));
@@ -10786,7 +10787,7 @@ int ObTransformUtils::replace_add_exprs_with_groupby_exprs(ObRawExpr *&expr_l,
     const ParamStore &param_store = trans_ctx->exec_ctx_->get_physical_plan_ctx()->get_param_store();
     const ObObjParam &left_param = param_store.at(idx_left);
     const ObObjParam &right_param = param_store.at(idx_right);
-    if (!check_objparam_abs_equal(left_param, right_param)) {
+    if (!check_objparam_abs_equal(left_param, right_param, true)) {
       //do nothing.
     } else if (OB_FAIL(add_compare_int_constraint(trans_ctx,
                                                    static_cast<ObConstRawExpr*>(expr_r),
@@ -10812,7 +10813,10 @@ int ObTransformUtils::replace_add_exprs_with_groupby_exprs(ObRawExpr *&expr_l,
   return ret;
 }
 
-bool ObTransformUtils::check_objparam_abs_equal(const ObObjParam &obj1, const ObObjParam &obj2) {
+bool ObTransformUtils::check_objparam_abs_equal(const ObObjParam &obj1, const ObObjParam &obj2,
+                                                const bool override_ora_const_numeric_cmp)
+{
+  int ret = OB_SUCCESS;
   bool is_abs_equal = false;
   if (obj1.is_number() && obj2.is_number()) {
     is_abs_equal = (obj1.get_number().abs_compare(obj2.get_number()) == 0);
@@ -10822,6 +10826,29 @@ bool ObTransformUtils::check_objparam_abs_equal(const ObObjParam &obj1, const Ob
     is_abs_equal = (obj1.get_float() + obj2.get_float() == 0) || (obj1.get_float() == obj2.get_float());
   } else if (obj1.is_decimal_int() && obj2.is_decimal_int()) {
     is_abs_equal = wide::abs_equal(obj1, obj2);
+  } else if (override_ora_const_numeric_cmp
+             && ((obj1.is_decimal_int() && obj2.is_number())
+                 || (obj1.is_number() && obj2.is_decimal_int()))) {
+    // select (a - 1) from t group by grouping sets(a, 1);
+    // `1` parsed as decimal int in `a - 1`
+    // `1' parsed as number in grouping sets
+    // special comparision is needed here to replace const `1`
+    ObNumStackOnceAlloc tmp_alloc;
+    ObNumber l_nmb, r_nmb;
+    if (obj1.is_decimal_int()) {
+      if (OB_FAIL(wide::to_number(obj1.get_decimal_int(), obj1.get_int_bytes(), obj1.get_scale(), tmp_alloc, l_nmb))) {
+        LOG_ERROR("wide::to_number failed", K(ret));
+      } else {
+        r_nmb.shadow_copy(obj2.get_number());
+      }
+    } else if (OB_FAIL(wide::to_number(obj2.get_decimal_int(), obj2.get_int_bytes(),
+                                       obj2.get_scale(), tmp_alloc, r_nmb))) {
+      LOG_ERROR("wide::to_number failed", K(ret));
+    } else {
+      l_nmb.shadow_copy(obj1.get_number());
+    }
+    OB_ASSERT(ret == OB_SUCCESS);
+    is_abs_equal = l_nmb.abs_compare(r_nmb) == 0;
   }
   return is_abs_equal;
 }
@@ -12447,7 +12474,7 @@ int ObTransformUtils::add_part_column_exprs_for_heap_table(const ObDMLStmt *stmt
   if (OB_ISNULL(stmt) || OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(stmt), K(table_schema));
-  } else if (table_schema->is_heap_table()) {
+  } else if (table_schema->is_table_without_pk()) {
     const ObRawExpr *part_expr = stmt->get_part_expr(table_id, table_schema->get_table_id());
     const ObRawExpr *subpart_expr = stmt->get_subpart_expr(table_id, table_schema->get_table_id());
     if (part_expr != NULL &&

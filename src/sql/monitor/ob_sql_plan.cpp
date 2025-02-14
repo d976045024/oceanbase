@@ -233,7 +233,9 @@ int ObSqlPlan::get_plan_used_hint_info_one_line(PlanText &plan_text,
     plan_text.is_oneline_ = true;
     plan_text.pos_ = 0;
     BUF_PRINT_CONST_STR("/*+ ", plan_text);
-    if (OB_FAIL(get_plan_tree_used_hint(plan_text, plan->get_plan_root()))) {
+    if (OB_FAIL(reset_plan_tree_outline_flag(plan->get_plan_root()))) {
+      LOG_WARN("failed to reset plan tree outline flag", K(ret));
+    } else if (OB_FAIL(get_plan_tree_used_hint(plan_text, plan->get_plan_root()))) {
       LOG_WARN("failed to get plan tree used hint", K(ret));
     } else if (OB_FAIL(query_hint.print_qb_name_hints(plan_text))) {
       LOG_WARN("failed to print qb name hints", K(ret));
@@ -271,39 +273,33 @@ int ObSqlPlan::construct_outline_global_hint(ObLogPlan &plan, ObGlobalHint &outl
   ObDelUpdLogPlan *del_upd_plan = NULL;
   outline_global_hint.pdml_option_ = ObPDMLOption::NOT_SPECIFIED;
   outline_global_hint.parallel_ = ObGlobalHint::UNSET_PARALLEL;
+  outline_global_hint.dml_parallel_ = ObGlobalHint::UNSET_PARALLEL;
   outline_global_hint.parallel_das_dml_option_ = ObParallelDASOption::NOT_SPECIFIED;
   const ObQueryCtx *query_ctx = NULL;
   if (OB_ISNULL(query_ctx = plan.get_optimizer_context().get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected NULL", K(ret), K(query_ctx));
   } else {
-    bool has_set_parallel = false;
     outline_global_hint.opt_features_version_ = query_ctx->optimizer_features_enable_version_;
     if (NULL != (del_upd_plan = dynamic_cast<ObDelUpdLogPlan*>(&plan))) {
       if (del_upd_plan->use_pdml()) {
         outline_global_hint.pdml_option_ = ObPDMLOption::ENABLE;
-      }
-
-      if (del_upd_plan->get_can_use_parallel_das_dml()) {
-        has_set_parallel = true;
+        outline_global_hint.merge_dml_parallel_hint(del_upd_plan->get_max_dml_parallel());
+      } else if (del_upd_plan->get_can_use_parallel_das_dml()) {
         outline_global_hint.parallel_das_dml_option_ = ObParallelDASOption::ENABLE;
-        if (plan.get_optimizer_context().is_use_auto_dop()) {
-          outline_global_hint.merge_parallel_hint(ObGlobalHint::SET_ENABLE_AUTO_DOP);
-        } else {
-          outline_global_hint.merge_parallel_hint(del_upd_plan->get_max_dml_parallel());
-        }
+        outline_global_hint.merge_dml_parallel_hint(del_upd_plan->get_max_dml_parallel());
       }
     }
-    if (has_set_parallel) {
-      // set parallel_ before
-    } else if (plan.get_optimizer_context().is_use_auto_dop()) {
-      outline_global_hint.merge_parallel_hint(ObGlobalHint::SET_ENABLE_AUTO_DOP);
+    if (plan.get_optimizer_context().is_use_auto_dop()) {
+      outline_global_hint.parallel_ = ObGlobalHint::SET_ENABLE_AUTO_DOP;
+    } else if (plan.get_optimizer_context().get_max_parallel() > ObGlobalHint::DEFAULT_PARALLEL) {
+      outline_global_hint.merge_parallel_hint(plan.get_optimizer_context().get_max_parallel());
     } else if (plan.get_optimizer_context().get_max_parallel() > ObGlobalHint::DEFAULT_PARALLEL) {
       outline_global_hint.merge_parallel_hint(plan.get_optimizer_context().get_max_parallel());
     }
   }
   LOG_TRACE("after construct_outline_global_hint", K(outline_global_hint.parallel_das_dml_option_),
-            K(outline_global_hint.pdml_option_), K(outline_global_hint.parallel_));
+            K(outline_global_hint.pdml_option_), K(outline_global_hint.dml_parallel_), K(outline_global_hint.parallel_));
   return ret;
 }
 
@@ -703,7 +699,9 @@ int ObSqlPlan::get_plan_used_hint_info(PlanText &plan_text,
     BUF_PRINT_CONST_STR("  /*+", temp_text);
     BUF_PRINT_CONST_STR(NEW_LINE, temp_text);
     BUF_PRINT_CONST_STR(OUTPUT_PREFIX, temp_text);
-    if (OB_FAIL(get_plan_tree_used_hint(temp_text, plan_top))) {
+    if (OB_FAIL(reset_plan_tree_outline_flag(plan_top))) {
+      LOG_WARN("failed to reset plan tree outline flag", K(ret));
+    } else if (OB_FAIL(get_plan_tree_used_hint(temp_text, plan_top))) {
       LOG_WARN("failed to get plan tree used hint", K(ret));
     } else if (OB_FAIL(query_hint.print_qb_name_hints(temp_text))) {
       LOG_WARN("failed to print qb name hints", K(ret));

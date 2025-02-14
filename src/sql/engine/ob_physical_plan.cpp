@@ -137,7 +137,7 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     insertup_can_do_gts_opt_(false),
     px_node_policy_(ObPxNodePolicy::INVALID),
     px_node_addrs_(&allocator_),
-    px_node_count_(ObGlobalHint::UNSET_PX_NODE_COUNT)
+    px_node_count_(ObPxNodeHint::UNSET_PX_NODE_COUNT)
 {
 }
 
@@ -250,7 +250,7 @@ void ObPhysicalPlan::reset()
   direct_load_need_sort_ = false;
   insertup_can_do_gts_opt_ = false;
   px_node_policy_ = ObPxNodePolicy::INVALID;
-  px_node_count_ = ObGlobalHint::UNSET_PX_NODE_COUNT;
+  px_node_count_ = ObPxNodeHint::UNSET_PX_NODE_COUNT;
   px_node_addrs_.reset();
 }
 void ObPhysicalPlan::destroy()
@@ -922,10 +922,12 @@ int ObPhysicalPlan::set_table_locations(const ObTablePartitionInfoArray &infos,
       }
     } else if (OB_FAIL(table_locations_.push_back(tl))) {
       LOG_WARN("fail to push table location", K(ret), K(i));
-    } else if (OB_FAIL(schema_guard.get_table_schema(MTL_ID(), tl.get_ref_table_id(), table_schema))) {
-      LOG_WARN("get table schema failed", K(ret), K(tl.get_ref_table_id()));
-    } else {
-      contain_index_location_ |= table_schema->is_index_table();
+    } else if (!is_external_object_id(tl.get_ref_table_id())) {
+      if (OB_FAIL(schema_guard.get_table_schema(MTL_ID(), tl.get_ref_table_id(), table_schema))) {
+        LOG_WARN("get table schema failed", K(ret), K(tl.get_ref_table_id()));
+      } else {
+        contain_index_location_ |= table_schema->is_index_table();
+      }
     }
     LOG_DEBUG("set table location", K(tl), K(tl.use_das()));
   }
@@ -1613,6 +1615,16 @@ bool ObPhysicalPlan::try_record_plan_info()
   bool expected = true;
   bool b_ret = can_set_feedback_info_.compare_exchange_strong(expected, false);
   return b_ret;
+}
+
+int ObPhysicalPlan::set_px_node_addrs(
+          const common::ObIArray<common::ObAddr> &px_node_addrs)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(px_node_addrs_.assign(px_node_addrs))) {
+    LOG_WARN("failed to assign px_node_addrs", K(ret));
+  }
+  return ret;
 }
 
 } //namespace sql

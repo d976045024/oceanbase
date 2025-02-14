@@ -1292,6 +1292,7 @@ protected:
 private:
   int process_read();
   int process_getlength();
+  int64_t get_timeout() const;
 };
 
 // Stream get ls meta and all tablet meta
@@ -1524,8 +1525,6 @@ public:
       const ObStorageHASrcInfo &src_info,
       const share::ObLSID &ls_id,
       obrpc::ObFetchLSMemberListInfo &ls_info) = 0;
-  virtual int post_ls_disaster_recovery_res(const common::ObAddr &server,
-                           const obrpc::ObDRTaskReplyResult &res) = 0;
 
   // Notify follower restore some tablets from leader.
   virtual int notify_restore_tablets(
@@ -1624,8 +1623,6 @@ public:
       const ObStorageHASrcInfo &src_info,
       const share::ObLSID &ls_id,
       obrpc::ObFetchLSMemberListInfo &ls_info);
-  virtual int post_ls_disaster_recovery_res(const common::ObAddr &server,
-                           const obrpc::ObDRTaskReplyResult &res);
 
   // Notify follower restore some tablets from leader.
   virtual int notify_restore_tablets(

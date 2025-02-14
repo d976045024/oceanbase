@@ -232,7 +232,8 @@ int ObUserDefinedType::deep_copy_obj(
 
   if (OB_SUCC(ret)) {
     switch (src.get_meta().get_extend_type()) {
-    case PL_CURSOR_TYPE: {
+    case PL_CURSOR_TYPE:
+    case PL_REF_CURSOR_TYPE: {
       OZ (ObRefCursorType::deep_copy_cursor(allocator, src, dst));
     }
       break;
@@ -250,7 +251,7 @@ int ObUserDefinedType::deep_copy_obj(
 
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected type to deep copy", K(src), K(ret));
+      LOG_WARN("Unexpected type to deep copy", K(src), K(ret), K(src.get_meta().get_extend_type()));
     }
       break;
     }
@@ -1942,6 +1943,7 @@ int ObRecordType::get_serialize_size(
   int ret = OB_SUCCESS;
   ObPLRecord *record = reinterpret_cast<ObPLRecord *>(src);
   CK (OB_NOT_NULL(record));
+  OV (record->get_count() == record_members_.count(), OB_ERR_WRONG_TYPE_FOR_VAR, KPC(record), K(record_members_));
   OX (size += record->get_serialize_size());
   OX (size += serialization::encoded_length(record->get_count()));
 
@@ -1988,11 +1990,11 @@ int ObRecordType::deserialize(
   OX (record->deserialize(src, src_len, src_pos));
   if (OB_SUCC(ret) && record->get_type() != PL_INVALID_TYPE) {
     OZ (serialization::decode(src, src_len, src_pos, count));
+    CK (count == record_members_.count());
     OX (record->set_count(count));
 
     dst = reinterpret_cast<char*>(record->get_element());
     CK (OB_NOT_NULL(dst));
-    CK (count == record_members_.count());
     CK (OB_NOT_NULL(record->get_allocator()));
     for (int64_t i = 0; OB_SUCC(ret) && i < record_members_.count(); ++i) {
       const ObPLDataType *type = get_record_member_type(i);

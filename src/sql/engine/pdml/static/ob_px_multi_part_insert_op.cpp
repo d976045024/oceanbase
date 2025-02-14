@@ -43,7 +43,7 @@ int ObPxMultiPartInsertOp::inner_open()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table or row desc is invalid", K(ret), K(MY_SPEC.row_desc_));
   } else if (OB_FAIL(data_driver_.init(get_spec(), ctx_.get_allocator(), ins_rtdef_, this, this,
-                                       MY_SPEC.ins_ctdef_.is_heap_table_))) {
+                                       MY_SPEC.ins_ctdef_.is_table_without_pk_))) {
     LOG_WARN("failed to init data driver", K(ret));
   } else if (OB_UNLIKELY(GET_PHY_PLAN_CTX(ctx_)->get_is_direct_insert_plan())) {
     ret = OB_ERR_UNEXPECTED;
@@ -190,7 +190,7 @@ int ObPxMultiPartInsertOp::write_rows(ObExecContext &ctx,
       if (OB_FAIL(submit_all_dml_task())) {
         LOG_WARN("do insert rows post process failed", K(ret));
       } else {
-        op_monitor_info_.otherstat_6_value_ += ins_rtdef_.das_rtdef_.affected_rows_;
+        op_monitor_info_.otherstat_5_value_ += ins_rtdef_.das_rtdef_.affected_rows_;
       }
     }
     if (!(MY_SPEC.is_pdml_index_maintain_)) {
@@ -200,7 +200,7 @@ int ObPxMultiPartInsertOp::write_rows(ObExecContext &ctx,
     LOG_TRACE("pdml insert ok", K(MY_SPEC.is_pdml_index_maintain_),
               K(ins_rtdef_.das_rtdef_.affected_rows_), K(op_monitor_info_.otherstat_1_value_),
               K(op_monitor_info_.otherstat_2_value_), K(op_monitor_info_.otherstat_3_value_),
-              K(op_monitor_info_.otherstat_4_value_), K(op_monitor_info_.otherstat_6_value_));
+              K(op_monitor_info_.otherstat_4_value_), K(op_monitor_info_.otherstat_5_value_));
     ins_rtdef_.das_rtdef_.affected_rows_ = 0;
   }
   return ret;

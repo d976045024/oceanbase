@@ -55,6 +55,9 @@ public:
                                            ObExecContext *root_ctx,
                                            SeRowkeyDistCtx *&rowkey_dist_ctx);
 
+  static int check_table_cycle(const DASTableIdList* parent_table_set,
+                               const uint64_t table_id, bool &exist);
+  static int delete_table_id_from_parent_table_set(ObDMLRtCtx &dml_rtctx, const ObDMLBaseCtDef &dml_ctdef);
   static int check_lob_column_changed(ObEvalCtx &eval_ctx,
               const ObExpr& old_expr, ObDatum& old_datum,
               const ObExpr& new_expr, ObDatum& new_datum,
@@ -73,6 +76,39 @@ public:
                                 ObInsRtDef &ins_rtdef,
                                 ObTableModifyOp &dml_op,
                                 bool &is_check_cst_violated_ignored);
+  static int check_column_null(ObEvalCtx &eval_ctx,
+                               const ObExprPtrIArray &row,
+                               const ColumnContent &column_info,
+                               ObDatum &datum,
+                               const bool is_ignore,
+                               const bool is_single_value,
+                               const ObSQLMode sql_mode);
+  static int check_geometry_type(ObEvalCtx &eval_ctx,
+                                 const ExprFixedArray &dml_row,
+                                 const ColumnContent &column_info,
+                                 common::ObIAllocator &allocator,
+                                 ObDatum &datum);
+  static int check_filter_row(const ObInsCtDef &ins_ctdef,
+                              ObEvalCtx &eval_ctx,
+                              bool &is_skipped);
+  static int check_error_ret_by_row(const ObInsCtDef &ins_ctdef,
+                                    ObTableModifyOp &dml_op,
+                                    const int errcode);
+  static int process_insert_batch(const ObInsCtDef &ins_ctdef,
+                                  ObTableModifyOp &dml_op,
+                                  const bool use_rich_format);
+  static int check_column_type_batch(const ObInsCtDef &ins_ctdef,
+                                     ObTableModifyOp &dml_op,
+                                     const bool use_rich_format);
+  static int check_geometry_column_batch(const ObInsCtDef &ins_ctdef,
+                                         ObTableModifyOp &dml_op,
+                                         const ColumnContent &column_info);
+  static int check_column_null_batch(const ObInsCtDef &ins_ctdef,
+                                     ObTableModifyOp &dml_op,
+                                     const ColumnContent &column_info,
+                                     const bool use_rich_format);
+  static int check_filter_row_batch(const ObInsCtDef &ins_ctdef,
+                                    ObTableModifyOp &dml_op);
   static int process_before_stmt_trigger(const ObDMLBaseCtDef &dml_ctdef,
                                          ObDMLBaseRtDef &dml_rtdef,
                                          ObDMLRtCtx &dml_rtctx,
@@ -252,7 +288,7 @@ public:
                                   int64_t row_num,
                                   common::ObString &column_name,
                                   ObExecContext &ctx);
-  static int get_exec_ctx_for_duplicate_rowkey_check(ObExecContext *ctx, ObExecContext* &needed_ctx);
+  static int get_root_exec_ctx_for_fk_cascading(ObExecContext *ctx, ObExecContext* &needed_ctx);
 
 private:
   static int check_agg_task_state(ObDMLRtCtx &dml_rtctx, ObIDASTaskOp *das_op, int64_t row_size, bool &reach_mem_limit);

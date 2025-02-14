@@ -197,7 +197,7 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
             } else if (!sql::ObSQLUtils::is_data_version_ge_422_or_431(min_data_version_) && col->is_hidden()) {
               // version lower than 4.3.1 does not support SHOW EXTENDED,
               // should not output hidden columns.
-            } else if (col->is_invisible_column()) { // 忽略 invisible 列
+            } else if (col->is_invisible_column() && lib::is_oracle_mode()) { // 忽略 invisible 列
               // mysql 8.0.23 has supported invisivle column, we should not ignore them
               // for mysql
             } else if (OB_FAIL(fill_row_cells(*table_schema, *col, has_column_priv))) {
@@ -276,7 +276,8 @@ int ObTableColumns::get_type_str(
   int64_t pos = 0;
 
   if (OB_FAIL(ob_sql_type_str(obj_meta, acc, type_info, default_length_semantics,
-                              column_type_str_, column_type_str_len_, pos, sub_type))) {
+                              column_type_str_, column_type_str_len_, pos, sub_type,
+                              column_schema.is_string_lob()))) {
     if (OB_MAX_SYS_PARAM_NAME_LENGTH == column_type_str_len_ && OB_SIZE_OVERFLOW == ret) {
       if (OB_UNLIKELY(NULL == (column_type_str_ = static_cast<char *>(allocator_->alloc(
                                OB_MAX_EXTENDED_TYPE_INFO_LENGTH))))) {
@@ -286,7 +287,8 @@ int ObTableColumns::get_type_str(
         pos = 0;
         column_type_str_len_ = OB_MAX_EXTENDED_TYPE_INFO_LENGTH;
         ret = ob_sql_type_str(obj_meta, acc, type_info, default_length_semantics,
-                              column_type_str_, column_type_str_len_, pos, sub_type);
+                              column_type_str_, column_type_str_len_, pos, sub_type,
+                              column_schema.is_string_lob());
       }
     }
   }
@@ -625,6 +627,32 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
           }
         }
 
+        if (OB_SUCC(ret) && lib::is_mysql_mode() && column_schema.is_invisible_column()) {
+          int64_t append_len = sizeof("INVISIBLE");
+          int64_t cur_len = extra_val.length();
+
+          if (cur_len > 0) {
+            append_len += 1;
+          }
+
+          int64_t buf_len = cur_len + append_len;
+
+          char *buf = NULL;
+          if (OB_ISNULL(buf = static_cast<char *>(allocator_->alloc(buf_len)))) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            SERVER_LOG(WARN, "fail to allocate memory", K(ret));
+          } else if (FALSE_IT(MEMCPY(buf, extra_val.ptr(), cur_len))) {
+          } else if (cur_len > 0
+                     && OB_FAIL(databuff_printf(buf, buf_len, cur_len, "%s", " INVISIBLE"))) {
+            SHARE_SCHEMA_LOG(WARN, "fail to print on Mysql invisible column", K(ret));
+          } else if (cur_len == 0
+                     && OB_FAIL(databuff_printf(buf, buf_len, cur_len, "%s", "INVISIBLE"))) {
+            SHARE_SCHEMA_LOG(WARN, "fail to print on Mysql invisible column", K(ret));
+          } else {
+            extra_val = ObString(buf_len, buf);
+          }
+        }
+
         cur_row_.cells_[cell_idx].set_varchar(extra_val);
         cur_row_.cells_[cell_idx].set_collation_type(
             ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -879,6 +907,8 @@ int ObTableColumns::deduce_column_attributes(
   // default = NULL: other cases
   //TODO: default = 0 case
   bool has_default = true;
+  // whether the mediumtext column is string.
+  bool is_string_lob = false;
   ObSqlString priv;
   ObRawExpr *&item_expr = const_cast<SelectItem &>(select_item).expr_;
   // In static engine the scale not idempotent in type deducing,
@@ -900,9 +930,9 @@ int ObTableColumns::deduce_column_attributes(
     }
     if (OB_FAIL(ret)) {
     } else if (ObRawExpr::EXPR_COLUMN_REF == expr->get_expr_class()) {
-      if (OB_FAIL(set_null_and_default_according_binary_expr(session->get_effective_tenant_id(),
-                                                             select_stmt, expr, schema_guard,
-                                                             nullable, has_default))) {
+      if (OB_FAIL(set_col_attrs_according_binary_expr(session->get_effective_tenant_id(),
+                                                      select_stmt, expr, schema_guard,
+                                                      nullable, has_default, is_string_lob))) {
         LOG_WARN("fail to get null and default for binary expr", K(ret));
       }
     } else if (expr->is_json_expr()
@@ -920,9 +950,9 @@ int ObTableColumns::deduce_column_attributes(
         } else {
           switch (t_expr->get_expr_class()) {
           case ObRawExpr::EXPR_COLUMN_REF:
-            if (OB_FAIL(set_null_and_default_according_binary_expr(session->get_effective_tenant_id(),
-                                                                   select_stmt, t_expr, schema_guard,
-                                                                   nullable, has_default))) {
+            if (OB_FAIL(set_col_attrs_according_binary_expr(session->get_effective_tenant_id(),
+                                                            select_stmt, t_expr, schema_guard,
+                                                            nullable, has_default, is_string_lob))) {
               LOG_WARN("fail to get null and default for binary expr", K(ret));
             }
             break;
@@ -996,7 +1026,8 @@ int ObTableColumns::deduce_column_attributes(
                                   result_type.get_scale(),
                                   result_type.get_collation_type(),
                                   extend_type_info,
-                                  sub_type))) {
+                                  sub_type,
+                                  is_string_lob))) {
         LOG_WARN("fail to get data type str", K(ret));
       } else {
         LOG_DEBUG("succ to ob_sql_type_str", K(ret), K(result_type), K(select_stmt), KPC(select_item.expr_), K(precision_or_length_semantics));
@@ -1094,6 +1125,7 @@ int ObTableColumns::deduce_column_attributes(
     OZ (ob_write_string(allocator, priv.string(), column_attributes.privileges_));
     column_attributes.result_type_ = select_item.expr_->get_result_type();
     column_attributes.is_hidden_ = 0;
+    column_attributes.is_string_lob_ = is_string_lob;
     //TODO:
     //ObObj default;
     //view_column.set_cur_default_value(default);
@@ -1102,13 +1134,14 @@ int ObTableColumns::deduce_column_attributes(
   return ret;
 }
 
-int ObTableColumns::set_null_and_default_according_binary_expr(
+int ObTableColumns::set_col_attrs_according_binary_expr(
     const uint64_t tenant_id,
     const ObSelectStmt *select_stmt,
     const ObRawExpr *expr,
     share::schema::ObSchemaGetterGuard *schema_guard,
     bool &nullable,
-    bool &has_default)
+    bool &has_default,
+    bool &is_string_lob)
 {
   int ret = OB_SUCCESS;
   const ObColumnRefRawExpr *bexpr = NULL;
@@ -1142,8 +1175,11 @@ int ObTableColumns::set_null_and_default_according_binary_expr(
                 && column_schema->is_nullable()) {
         nullable = true;
       } else {/*do nothing*/}
-      if (OB_SUCC(ret) && has_default && column_schema->get_cur_default_value().is_null()) {
-        has_default = false;
+      if (OB_SUCC(ret)) {
+        if (has_default && column_schema->get_cur_default_value().is_null()) {
+          has_default = false;
+        }
+        is_string_lob = column_schema->is_string_lob();
       }
     }
   }

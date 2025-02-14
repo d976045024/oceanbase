@@ -412,8 +412,7 @@ public:
   static
   int build_record_type_by_view_schema(const ObPLResolveCtx &resolve_ctx,
                                 const share::schema::ObTableSchema* view_schema,
-                                ObRecordType *&record_type,
-                                ObIArray<ObSchemaObjVersion> *dependency_objects = NULL);
+                                ObRecordType *&record_type);
   static
   int build_record_type_by_table_schema(share::schema::ObSchemaGetterGuard &schema_guard,
                                 common::ObIAllocator &allocator,
@@ -430,8 +429,7 @@ public:
   static
   int build_record_type_by_schema(const ObPLResolveCtx &resolve_ctx,
                                 const share::schema::ObTableSchema* table_schema,
-                                ObRecordType *&record_type, bool with_rowid = false,
-                                ObIArray<ObSchemaObjVersion> *dependency_objects = NULL);
+                                ObRecordType *&record_type, bool with_rowid = false);
   static
   int build_dblink_record_type_by_schema(const ObPLResolveCtx &resolve_ctx,
                                          const ObTableSchema* table_schema,
@@ -529,6 +527,8 @@ public:
   static int check_composite_compatible(const ObUserDefinedType *actual_param_type,
                                         const ObUserDefinedType *formal_param_type,
                                         bool &is_compatible);
+  static int check_composite_cast(const ObPLINS &ns,
+                                  ObRawExpr *&expr);
   int check_anonymous_array_compatible( uint64_t actual_param_type_id,
                                         uint64_t formal_param_type_id,
                                         bool &is_compatible);

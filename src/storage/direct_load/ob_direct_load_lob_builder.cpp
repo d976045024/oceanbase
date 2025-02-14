@@ -13,6 +13,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/direct_load/ob_direct_load_lob_builder.h"
+#include "storage/direct_load/ob_direct_load_datum_row.h"
+#include "storage/direct_load/ob_direct_load_insert_lob_table_ctx.h"
 #include "storage/direct_load/ob_direct_load_row_iterator.h"
 #include "storage/direct_load/ob_direct_load_vector_utils.h"
 
@@ -31,6 +33,7 @@ using namespace sql;
 
 ObDirectLoadLobBuilder::ObDirectLoadLobBuilder()
   : insert_tablet_ctx_(nullptr),
+    insert_lob_tablet_ctx_(nullptr),
     lob_allocator_(nullptr),
     inner_lob_allocator_("TLD_LobAlloc"),
     lob_column_idxs_(nullptr),
@@ -56,17 +59,18 @@ int ObDirectLoadLobBuilder::init(ObDirectLoadInsertTabletContext *insert_tablet_
   } else if (OB_UNLIKELY(nullptr == insert_tablet_ctx || !insert_tablet_ctx->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KPC(insert_tablet_ctx));
-  } else if (OB_UNLIKELY(!insert_tablet_ctx->has_lob_storage())) {
+  } else if (OB_UNLIKELY(!insert_tablet_ctx->has_lob_storage() || nullptr == insert_tablet_ctx->get_lob_tablet_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected has no lob", KR(ret), KPC(insert_tablet_ctx));
   } else {
     insert_tablet_ctx_ = insert_tablet_ctx;
+    insert_lob_tablet_ctx_ = insert_tablet_ctx->get_lob_tablet_ctx();
     lob_allocator_ = (nullptr != lob_allocator ? lob_allocator : &inner_lob_allocator_);
     lob_column_idxs_ = insert_tablet_ctx->get_lob_column_idxs();
     lob_column_cnt_ = lob_column_idxs_->count();
     extra_rowkey_cnt_ = ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
     lob_inrow_threshold_ = insert_tablet_ctx->get_lob_inrow_threshold();
-    if (OB_FAIL(init_sstable_slice_ctx())) {
+    if (!insert_tablet_ctx->get_is_index_table() && OB_FAIL(init_sstable_slice_ctx())) {
       LOG_WARN("fail to init sstable slice ctx", KR(ret));
     } else {
       is_inited_ = true;
@@ -78,9 +82,10 @@ int ObDirectLoadLobBuilder::init(ObDirectLoadInsertTabletContext *insert_tablet_
 int ObDirectLoadLobBuilder::init_sstable_slice_ctx()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(insert_tablet_ctx_->get_lob_write_ctx(write_ctx_))) {
+  if (OB_FAIL(insert_lob_tablet_ctx_->get_write_ctx(write_ctx_))) {
     LOG_WARN("fail to get write ctx", KR(ret));
-  } else if (OB_FAIL(insert_tablet_ctx_->open_lob_sstable_slice(write_ctx_.start_seq_,
+  } else if (OB_FAIL(insert_lob_tablet_ctx_->open_sstable_slice(write_ctx_.start_seq_,
+                                                                0/*slice_idx*/,
                                                                 current_lob_slice_id_))) {
     LOG_WARN("fail to construct sstable slice", KR(ret));
   }
@@ -90,8 +95,8 @@ int ObDirectLoadLobBuilder::init_sstable_slice_ctx()
 int ObDirectLoadLobBuilder::switch_sstable_slice()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(insert_tablet_ctx_->close_lob_sstable_slice(current_lob_slice_id_))) {
-    LOG_WARN("fail to close sstable slice builder", KR(ret));
+  if (OB_FAIL(insert_lob_tablet_ctx_->close_sstable_slice(current_lob_slice_id_, 0/*slice_idx*/))) {
+    LOG_WARN("fail to close sstable slice", KR(ret));
   } else if (OB_FAIL(init_sstable_slice_ctx())) {
     LOG_WARN("fail to init sstable slice ctx", KR(ret));
   }
@@ -106,7 +111,17 @@ int ObDirectLoadLobBuilder::check_can_skip(char *ptr, uint32_t len, bool &can_sk
     LOG_WARN("unexpected lob column is empty data", KR(ret), KP(ptr), K(len));
   } else {
     ObLobLocatorV2 locator(ptr, len, true /*has_lob_header*/);
-    can_skip = (locator.is_inrow_disk_lob_locator() && (len - sizeof(ObLobCommon) <= lob_inrow_threshold_));
+    if (insert_tablet_ctx_->get_is_index_table()) {
+      if (!locator.is_inrow_disk_lob_locator() || len - sizeof(ObLobCommon) > lob_inrow_threshold_) {
+        ret = OB_ERR_TOO_LONG_KEY_LENGTH;
+        LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH);
+        STORAGE_LOG(WARN, "invalid lob", K(ret), K(locator), KP(ptr), K(len));
+      } else {
+        can_skip = true;
+      }
+    } else {
+      can_skip = (locator.is_inrow_disk_lob_locator() && (len - sizeof(ObLobCommon) <= lob_inrow_threshold_));
+    }
   }
   return ret;
 }
@@ -116,7 +131,8 @@ int ObDirectLoadLobBuilder::check_can_skip(const ObDatumRow &datum_row, bool &ca
   int ret = OB_SUCCESS;
   can_skip = true;
   for (int64_t i = 0; OB_SUCC(ret) && can_skip && i < lob_column_idxs_->count(); ++i) {
-    const int64_t column_idx = lob_column_idxs_->at(i) + extra_rowkey_cnt_;
+    const bool is_rowkey_col = lob_column_idxs_->at(i) < insert_tablet_ctx_->get_rowkey_column_count();
+    const int64_t column_idx = is_rowkey_col ? lob_column_idxs_->at(i) : lob_column_idxs_->at(i) + extra_rowkey_cnt_;
     const ObDatum &datum = datum_row.storage_datums_[column_idx];
     if (datum.is_null()) {
     } else if (OB_FAIL(check_can_skip(const_cast<char *>(datum.ptr_), datum.len_, can_skip))) {
@@ -131,7 +147,8 @@ int ObDirectLoadLobBuilder::check_can_skip(const ObBatchDatumRows &datum_rows, b
   int ret = OB_SUCCESS;
   can_skip = true;
   for (int64_t i = 0; OB_SUCC(ret) && can_skip && i < lob_column_idxs_->count(); ++i) {
-    const int64_t column_idx = lob_column_idxs_->at(i) + extra_rowkey_cnt_;
+    const bool is_rowkey_col = lob_column_idxs_->at(i) < insert_tablet_ctx_->get_rowkey_column_count();
+    const int64_t column_idx = is_rowkey_col ? lob_column_idxs_->at(i) : lob_column_idxs_->at(i) + extra_rowkey_cnt_;
     ObIVector *vector = datum_rows.vectors_.at(column_idx);
     const VectorFormat format = vector->get_format();
     switch (format) {
@@ -209,11 +226,11 @@ int ObDirectLoadLobBuilder::append_row(ObDatumRow &datum_row)
   } else if (write_ctx_.pk_interval_.remain_count() < lob_column_cnt_ &&
              OB_FAIL(switch_sstable_slice())) {
     LOG_WARN("fail to switch sstable slice", KR(ret));
-  } else if (OB_FAIL(insert_tablet_ctx_->fill_lob_sstable_slice(*lob_allocator_,
+  } else if (OB_FAIL(insert_lob_tablet_ctx_->fill_lob_sstable_slice(*lob_allocator_,
                                                                 current_lob_slice_id_,
                                                                 write_ctx_.pk_interval_,
                                                                 datum_row))) {
-    LOG_WARN("fail to fill lob sstable slice", K(ret), KP(insert_tablet_ctx_),
+    LOG_WARN("fail to fill lob sstable slice", K(ret), KP(insert_lob_tablet_ctx_),
              K(current_lob_slice_id_), K(write_ctx_.pk_interval_), K(datum_row));
   }
   return ret;
@@ -231,11 +248,11 @@ int ObDirectLoadLobBuilder::append_batch(ObBatchDatumRows &datum_rows)
     // do nothing
   } else if (write_ctx_.pk_interval_.remain_count() < lob_cnt && OB_FAIL(switch_sstable_slice())) {
     LOG_WARN("fail to switch sstable slice", KR(ret));
-  } else if (OB_FAIL(insert_tablet_ctx_->fill_lob_sstable_slice(*lob_allocator_,
+  } else if (OB_FAIL(insert_lob_tablet_ctx_->fill_lob_sstable_slice(*lob_allocator_,
                                                                 current_lob_slice_id_,
                                                                 write_ctx_.pk_interval_,
                                                                 datum_rows))) {
-    LOG_WARN("fail to fill lob sstable slice batch", K(ret), KP(insert_tablet_ctx_),
+    LOG_WARN("fail to fill lob sstable slice batch", K(ret), KP(insert_lob_tablet_ctx_),
              K(current_lob_slice_id_), K(write_ctx_.pk_interval_), K(datum_rows));
   }
   return ret;
@@ -271,33 +288,35 @@ int ObDirectLoadLobBuilder::append_lob(ObBatchDatumRows &datum_rows)
   return ret;
 }
 
-int ObDirectLoadLobBuilder::fill_into_datum_row(ObDatumRow &datum_row,
+int ObDirectLoadLobBuilder::fill_into_datum_row(ObDirectLoadDatumRow &datum_row,
                                                 const ObDirectLoadRowFlag &row_flag)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; i < lob_column_idxs_->count(); ++i) {
     const int64_t column_idx = lob_column_idxs_->at(i);
     const int64_t src_column_idx = row_flag.uncontain_hidden_pk_ ? column_idx - 1 : column_idx;
-    const int64_t dest_column_idx = column_idx + extra_rowkey_cnt_;
+    const int64_t dest_column_idx = column_idx < insert_tablet_ctx_->get_rowkey_column_count()
+                                     ? column_idx : column_idx + extra_rowkey_cnt_;
     datum_row_.storage_datums_[dest_column_idx] = datum_row.storage_datums_[src_column_idx];
   }
   return ret;
 }
 
-int ObDirectLoadLobBuilder::fetch_from_datum_row(ObDatumRow &datum_row,
+int ObDirectLoadLobBuilder::fetch_from_datum_row(ObDirectLoadDatumRow &datum_row,
                                                  const ObDirectLoadRowFlag &row_flag)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; i < lob_column_idxs_->count(); ++i) {
     const int64_t column_idx = lob_column_idxs_->at(i);
     const int64_t src_column_idx = row_flag.uncontain_hidden_pk_ ? column_idx - 1 : column_idx;
-    const int64_t dest_column_idx = column_idx + extra_rowkey_cnt_;
+    const int64_t dest_column_idx = column_idx < insert_tablet_ctx_->get_rowkey_column_count()
+                                     ? column_idx : column_idx + extra_rowkey_cnt_;
     datum_row.storage_datums_[src_column_idx] = datum_row_.storage_datums_[dest_column_idx];
   }
   return ret;
 }
 
-int ObDirectLoadLobBuilder::append_lob(ObDatumRow &datum_row,
+int ObDirectLoadLobBuilder::append_lob(ObDirectLoadDatumRow &datum_row,
                                        const ObDirectLoadRowFlag &row_flag)
 {
   int ret = OB_SUCCESS;
@@ -329,7 +348,8 @@ int ObDirectLoadLobBuilder::fill_into_datum_row(const IVectorPtrs &vectors,
   for (int64_t i = 0; OB_SUCC(ret) && i < lob_column_idxs_->count(); ++i) {
     const int64_t column_idx = lob_column_idxs_->at(i);
     const int64_t src_column_idx = row_flag.uncontain_hidden_pk_ ? column_idx - 1 : column_idx;
-    const int64_t dest_column_idx = column_idx + extra_rowkey_cnt_;
+    const int64_t dest_column_idx = column_idx < insert_tablet_ctx_->get_rowkey_column_count()
+                                     ? column_idx : column_idx + extra_rowkey_cnt_;
     ObIVector *vector = vectors.at(src_column_idx);
     ObDatum &datum = datum_row_.storage_datums_[dest_column_idx];
     if (OB_FAIL(ObDirectLoadVectorUtils::to_datum(vector, row_idx, datum))) {
@@ -347,7 +367,8 @@ int ObDirectLoadLobBuilder::fetch_from_datum_row(const IVectorPtrs &vectors,
   for (int64_t i = 0; OB_SUCC(ret) && i < lob_column_idxs_->count(); ++i) {
     const int64_t column_idx = lob_column_idxs_->at(i);
     const int64_t src_column_idx = row_flag.uncontain_hidden_pk_ ? column_idx - 1 : column_idx;
-    const int64_t dest_column_idx = column_idx + extra_rowkey_cnt_;
+    const int64_t dest_column_idx = column_idx < insert_tablet_ctx_->get_rowkey_column_count()
+                                     ? column_idx : column_idx + extra_rowkey_cnt_;
     ObIVector *vector = vectors.at(src_column_idx);
     ObDatum &datum = datum_row_.storage_datums_[dest_column_idx];
     if (OB_FAIL(ObDirectLoadVectorUtils::set_datum(vector, row_idx, datum))) {
@@ -392,7 +413,7 @@ int ObDirectLoadLobBuilder::close()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet lob builder is closed", KR(ret));
   } else {
-    if (OB_FAIL(insert_tablet_ctx_->close_lob_sstable_slice(current_lob_slice_id_))) {
+    if (!insert_tablet_ctx_->get_is_index_table() && OB_FAIL(insert_lob_tablet_ctx_->close_sstable_slice(current_lob_slice_id_, 0/*slice_idx*/))) {
       LOG_WARN("fail to close sstable slice ", KR(ret));
     } else {
       current_lob_slice_id_ = 0;

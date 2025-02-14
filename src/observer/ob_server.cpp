@@ -239,15 +239,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
   }
 #endif
 
-  // start ObTimerService first, because some timers depend on it
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObSimpleThreadPoolDynamicMgr::get_instance().init())) {
-      LOG_ERROR("init queue_thread dynamic mgr failed", KR(ret));
-    } else if (OB_FAIL(ObTimerService::get_instance().start())) {
-      LOG_ERROR("start timer service failed", KR(ret));
-    }
-  }
-
   // server parameters be inited here.
   if (OB_SUCC(ret) && OB_FAIL(init_config())) {
     LOG_ERROR("init config failed", KR(ret));
@@ -264,6 +255,15 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
   }
   // set large page param
   ObLargePageHelper::set_param(config_.use_large_pages);
+
+  // start ObTimerService first, because some timers depend on it
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(ObSimpleThreadPoolDynamicMgr::get_instance().init())) {
+      LOG_ERROR("init queue_thread dynamic mgr failed", KR(ret));
+    } else if (OB_FAIL(ObTimerService::get_instance().start())) {
+      LOG_ERROR("start timer service failed", KR(ret));
+    }
+  }
 
   if (is_arbitration_mode()) {
 #ifdef OB_BUILD_ARBITRATION
@@ -3034,6 +3034,7 @@ int ObServer::init_global_context()
   if (is_valid_server_id(gctx_.get_server_id())) {
     LOG_INFO("this observer has had a valid server_id", K(gctx_.get_server_id()));
   }
+  gctx_.in_bootstrap_ = false;
   if ((PHY_FLASHBACK_MODE == gctx_.startup_mode_ || PHY_FLASHBACK_VERIFY_MODE == gctx_.startup_mode_)
       && 0 >= gctx_.flashback_scn_) {
     ret = OB_INVALID_ARGUMENT;

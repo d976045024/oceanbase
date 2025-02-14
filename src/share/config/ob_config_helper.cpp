@@ -1566,6 +1566,14 @@ bool ObConfigS3URLEncodeTypeChecker::check(const ObConfigItem &t) const
   return bret;
 }
 
+bool ObConfigDefaultTableOrganizationChecker::check(const obrpc::ObAdminSetConfigItem &t)
+{
+  const ObString tmp_str(t.value_.size(), t.value_.ptr());
+  return 0 == tmp_str.case_compare("INDEX")
+      || 0 == tmp_str.case_compare("HEAP");
+}
+
+
 bool ObConfigEnableHashRollupChecker::check(const ObConfigItem &t) const
 {
   int bret = false;
@@ -1573,6 +1581,16 @@ bool ObConfigEnableHashRollupChecker::check(const ObConfigItem &t) const
   bret = (0 == tmp_str.case_compare("auto")
           || 0 == tmp_str.case_compare("forced")
           || 0 == tmp_str.case_compare("disabled"));
+  return bret;
+}
+
+bool ObConfigPxNodePolicyChecker::check(const ObConfigItem &t) const
+{
+  int bret = false;
+  common::ObString tmp_str(t.str());
+  bret = (0 == tmp_str.case_compare("data")
+          || 0 == tmp_str.case_compare("zone")
+          || 0 == tmp_str.case_compare("cluster"));
   return bret;
 }
 
@@ -1613,11 +1631,19 @@ bool ObConfigJavaParamsChecker::check(const ObConfigItem &t) const
   return bret;
 }
 
-bool ObConfigDefaultOrganizationChecker::check(const ObConfigItem &t) const
+bool ObConfigEnableAutoSplitChecker::check(const ObConfigItem &t) const
 {
-  const ObString tmp_str(t.str());
-  return 0 == tmp_str.case_compare("INDEX")
-      || 0 == tmp_str.case_compare("HEAP");
+  bool is_valid = false;
+  bool enable_auto_split = ObConfigBoolParser::get(t.str(), is_valid);
+  return is_valid && !(GCTX.is_shared_storage_mode() && enable_auto_split);
 }
+
+bool ObConfigAutoSplitTabletSizeChecker::check(const ObConfigItem &t) const
+{
+  bool is_valid = false;
+  int64_t value = ObConfigCapacityParser::get(t.str(), is_valid);
+  return is_valid && !GCTX.is_shared_storage_mode();
+}
+
 } // end of namepace common
 } // end of namespace oceanbase

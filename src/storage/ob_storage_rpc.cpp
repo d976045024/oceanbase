@@ -2926,6 +2926,20 @@ ObLobQueryP::ObLobQueryP(common::ObInOutBandwidthThrottle *bandwidth_throttle)
   set_preserve_recv_data();
 }
 
+int64_t ObLobQueryP::get_timeout() const
+{
+  int64_t timeout = 0;
+  const int64_t rpc_timeout = rpc_pkt_->get_timeout();
+  const int64_t send_timestamp = get_send_timestamp();
+  // oversize int64_t if rpc_timeout + send_timestamp > INT64_MAX
+  if (INT64_MAX - rpc_timeout - send_timestamp < 0) {
+    timeout = INT64_MAX;
+  } else {
+    timeout = rpc_timeout + send_timestamp;
+  }
+  return timeout;
+}
+
 int ObLobQueryP::process_read()
 {
   int ret = OB_SUCCESS;
@@ -2943,7 +2957,7 @@ int ObLobQueryP::process_read()
     param.scan_backward_ = arg_.scan_backward_;
     param.from_rpc_ = true;
     ObLobQueryIter *iter = nullptr;
-    int64_t timeout = rpc_pkt_->get_timeout() + get_send_timestamp();
+    int64_t timeout = get_timeout();
     if (OB_FAIL(lob_mngr->build_lob_param(param, allocator_, arg_.cs_type_, arg_.offset_,
         arg_.len_, timeout, arg_.lob_locator_))) {
       LOG_WARN("failed to build lob param", K(ret));
@@ -2990,7 +3004,7 @@ int ObLobQueryP::process_getlength()
   param.from_rpc_ = true;
   header.reset();
   uint64_t len = 0;
-  int64_t timeout = rpc_pkt_->get_timeout() + get_send_timestamp();
+  int64_t timeout = get_timeout();
   if (OB_FAIL(lob_mngr->build_lob_param(param, allocator_, arg_.cs_type_, arg_.offset_,
       arg_.len_, timeout, arg_.lob_locator_))) {
     LOG_WARN("failed to build lob param", K(ret));
@@ -4469,24 +4483,6 @@ int ObStorageRpc::post_ls_member_list_request(
     } else {
       FLOG_INFO("fetch ls member list successfully", K(member_info));
     }
-  }
-  return ret;
-}
-
-int ObStorageRpc::post_ls_disaster_recovery_res(const common::ObAddr &server,
-                         const obrpc::ObDRTaskReplyResult &res)
-{
-  int ret = OB_SUCCESS;
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "storage rpc is not inited", K(ret));
-  } else if (!server.is_valid() || !res.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(server), K(res));
-  } else if (OB_FAIL(rs_rpc_proxy_->to(server).disaster_recovery_task_reply(res))) {
-    STORAGE_LOG(WARN, "post ls migration result failed", K(ret), K(res), K(server));
-  } else {
-    STORAGE_LOG(TRACE, "post_ls_disaster_recovery_res successfully", K(res), K(server));
   }
   return ret;
 }

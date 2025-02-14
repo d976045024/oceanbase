@@ -888,7 +888,22 @@ int ObCreateTableHelper::generate_table_schema_()
     LOG_WARN("create table with table_id in 4.x is not supported",
              KR(ret), K_(tenant_id), "table_id", arg_.schema_.get_table_id());
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "create table with id is");
-  } else if (OB_FAIL(new_table.assign(arg_.schema_))) {
+  } else if (arg_.schema_.is_duplicate_table()) { // check compatibility for duplicate table
+    bool is_compatible = false;
+    if (OB_FAIL(ObShareUtil::check_compat_version_for_readonly_replica(tenant_id_, is_compatible))) {
+      LOG_WARN("fail to check compat version for duplicate log stream", KR(ret), K_(tenant_id));
+    } else if (!is_compatible) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("duplicate table is not supported below 4.2", KR(ret), K_(tenant_id));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "create duplicate table below 4.2");
+    } else if (!is_user_tenant(tenant_id_)) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("not user tenant, create duplicate table not supported", KR(ret), K_(tenant_id));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "not user tenant, create duplicate table");
+    }
+  }
+
+  if (FAILEDx(new_table.assign(arg_.schema_))) {
     LOG_WARN("fail to assign table schema", KR(ret), K_(tenant_id));
   } else if (FALSE_IT(new_table.set_table_id(mock_table_id))) {
   } else if (OB_FAIL(ddl_service_->try_format_partition_schema(new_table))) {
@@ -1208,35 +1223,45 @@ int ObCreateTableHelper::generate_foreign_keys_()
         const ObString &parent_table_name = foreign_key_arg.parent_table_;
         const bool self_reference = (0 == parent_table_name.case_compare(data_table.get_table_name_str())
                                      && 0 == parent_database_name.case_compare(arg_.db_name_));
-        // 1. fill ref_cst_type_/ref_cst_id_
+        // 1. fill fk_ref_type_/ref_cst_id_
         if (self_reference) {
           // TODO: is it necessory to determine whether it is case sensitive by check sys variable
           // check whether it belongs to self reference, if so, the parent schema is child schema.
           parent_table = &data_table;
-          if (CONSTRAINT_TYPE_PRIMARY_KEY == foreign_key_arg.ref_cst_type_) {
+          uint64_t compat_version = 0;
+          if (FK_REF_TYPE_PRIMARY_KEY == foreign_key_arg.fk_ref_type_) {
             if (is_oracle_mode) {
               ObTableSchema::const_constraint_iterator iter = parent_table->constraint_begin();
               for ( ; iter != parent_table->constraint_end(); ++iter) {
                 if (CONSTRAINT_TYPE_PRIMARY_KEY == (*iter)->get_constraint_type()) {
-                  foreign_key_info.ref_cst_type_ = CONSTRAINT_TYPE_PRIMARY_KEY;
+                  foreign_key_info.fk_ref_type_ = FK_REF_TYPE_PRIMARY_KEY;
                   foreign_key_info.ref_cst_id_ = (*iter)->get_constraint_id();
                   break;
                 }
               } // end for
             } else {
-              foreign_key_info.ref_cst_type_ = CONSTRAINT_TYPE_PRIMARY_KEY;
+              foreign_key_info.fk_ref_type_ = FK_REF_TYPE_PRIMARY_KEY;
               foreign_key_info.ref_cst_id_ = common::OB_INVALID_ID;
             }
-          } else if (CONSTRAINT_TYPE_UNIQUE_KEY == foreign_key_arg.ref_cst_type_) {
+          } else if (FK_REF_TYPE_UNIQUE_KEY == foreign_key_arg.fk_ref_type_) {
             if (OB_FAIL(ddl_service_->get_uk_cst_id_for_self_ref(new_tables_, foreign_key_arg, foreign_key_info))) {
               LOG_WARN("failed to get uk cst id for self ref", KR(ret), K(foreign_key_arg));
             }
+          } else if (OB_FAIL(GET_MIN_DATA_VERSION(data_table.get_tenant_id(), compat_version))) {
+            LOG_WARN("fail to get data version", KR(ret), K(data_table.get_tenant_id()));
+          } else if (!lib::is_oracle_mode() && FK_REF_TYPE_NON_UNIQUE_KEY == foreign_key_arg.fk_ref_type_) {
+            if (compat_version < DATA_VERSION_4_3_5_1) {
+              ret = OB_NOT_SUPPORTED;
+              LOG_WARN("foreign key referencing non-unique index is not supported in this version", K(ret));
+            } else if (OB_FAIL(ddl_service_->get_index_cst_id_for_self_ref(new_tables_, foreign_key_arg, foreign_key_info))) {
+              LOG_WARN("failed to get index cst id for self ref", K(ret), K(foreign_key_arg));
+            }
           } else {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("invalid foreign key ref cst type", KR(ret), K(foreign_key_arg));
+            LOG_WARN("invalid foreign key fk ref type", KR(ret), K(foreign_key_arg));
           }
         } else {
-          foreign_key_info.ref_cst_type_ = foreign_key_arg.ref_cst_type_;
+          foreign_key_info.fk_ref_type_ = foreign_key_arg.fk_ref_type_;
           foreign_key_info.ref_cst_id_ = foreign_key_arg.ref_cst_id_;
           if (foreign_key_arg.is_parent_table_mock_) {
             // skip
@@ -1561,7 +1586,7 @@ int ObCreateTableHelper::try_replace_mock_fk_parent_table_(
         const ObForeignKeyInfo &ori_foreign_key_info = mock_fk_parent_table->get_foreign_key_infos().at(i);
         ObForeignKeyInfo &new_foreign_key_info = new_mock_fk_parent_table->get_foreign_key_infos().at(i);
         new_foreign_key_info.parent_column_ids_.reuse();
-        new_foreign_key_info.ref_cst_type_ = CONSTRAINT_TYPE_INVALID;
+        new_foreign_key_info.fk_ref_type_ = FK_REF_TYPE_INVALID;
         new_foreign_key_info.is_parent_table_mock_ = false;
         new_foreign_key_info.parent_table_id_ = data_table.get_table_id();
         // replace parent table columns
@@ -1604,14 +1629,14 @@ int ObCreateTableHelper::try_replace_mock_fk_parent_table_(
             pk_column_ids, new_foreign_key_info.parent_column_ids_, is_match))) {
           LOG_WARN("check_match_columns failed", KR(ret));
         } else if (is_match) {
-          new_foreign_key_info.ref_cst_type_ = CONSTRAINT_TYPE_PRIMARY_KEY;
+          new_foreign_key_info.fk_ref_type_ = FK_REF_TYPE_PRIMARY_KEY;
         } else { // pk is not match, check if uk match
           if (OB_FAIL(ddl_service_->get_uk_cst_id_for_replacing_mock_fk_parent_table(
               index_schemas, new_foreign_key_info))) {
             LOG_WARN("fail to get_uk_cst_id_for_replacing_mock_fk_parent_table", KR(ret));
-          } else if (CONSTRAINT_TYPE_INVALID == new_foreign_key_info.ref_cst_type_) {
+          } else if (FK_REF_TYPE_INVALID == new_foreign_key_info.fk_ref_type_) {
             ret = OB_ERR_CANNOT_ADD_FOREIGN;
-            LOG_WARN("ref_cst_type is invalid", KR(ret), KPC(mock_fk_parent_table));
+            LOG_WARN("fk_ref_type is invalid", KR(ret), KPC(mock_fk_parent_table));
           }
         }
       }

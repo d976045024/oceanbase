@@ -85,6 +85,7 @@ typedef common::ParamStore ParamStore;
 class ObSchemaGetterGuard;
 class ObSimpleTableSchemaV2;
 class ObTableSchema;
+class ObTableMode;
 class ObColumnSchemaV2;
 #define ASSIGN_STRING(dst, src, field, buffer, skip)\
   (dst)->field.assign(buffer + offset, (src)->field.length());\
@@ -998,6 +999,7 @@ inline bool is_index_local_storage(ObIndexType index_type)
            || INDEX_TYPE_DOMAIN_CTXCAT_DEPRECATED == index_type
            || INDEX_TYPE_SPATIAL_LOCAL == index_type
            || INDEX_TYPE_SPATIAL_GLOBAL_LOCAL_STORAGE == index_type
+           || INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == index_type
            || is_local_fts_index(index_type)
            || is_local_vec_index(index_type)
            || is_global_local_fts_index(index_type)
@@ -1025,6 +1027,7 @@ inline bool index_has_tablet(const ObIndexType &index_type)
         || INDEX_TYPE_SPATIAL_LOCAL == index_type
         || INDEX_TYPE_SPATIAL_GLOBAL == index_type
         || INDEX_TYPE_SPATIAL_GLOBAL_LOCAL_STORAGE == index_type
+        || INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == index_type
         || is_fts_index(index_type)
         || is_multivalue_index(index_type)
         || is_vec_index(index_type);
@@ -1034,7 +1037,8 @@ inline static bool is_local_unique_index_table(const ObIndexType index_type)
 {
   return INDEX_TYPE_UNIQUE_LOCAL == index_type
       || INDEX_TYPE_UNIQUE_GLOBAL_LOCAL_STORAGE == index_type
-      || INDEX_TYPE_UNIQUE_MULTIVALUE_LOCAL == index_type;
+      || INDEX_TYPE_UNIQUE_MULTIVALUE_LOCAL == index_type
+      || INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == index_type;
 }
 
 struct ObTenantTableId
@@ -2090,6 +2094,7 @@ private:
   common::ObArrayHelper<common::ObString> zone_list_;
   common::ObString primary_zone_;
   bool locked_;
+  // read_only_ is not set now
   bool read_only_;  // After the schema is split, the value of the system variable shall prevail
   common::ObCharsetType charset_type_;
   common::ObCollationType collation_type_;
@@ -3392,6 +3397,21 @@ public:
       common::ObTabletID &tablet_id,
       common::ObObjectID &subpart_id,
       RelatedTableInfo *related_table = NULL);
+
+  static int get_tablet_and_part_id(
+    const share::schema::ObTableSchema &table_schema,
+    const common::ObObjectID &target_part_id,
+    common::ObTabletID &tablet_id,
+    common::ObObjectID &part_id,
+    RelatedTableInfo *related_table /*= NULL*/);
+
+  static int get_tablet_and_subpart_id(
+    const share::schema::ObTableSchema &table_schema,
+    const common::ObPartID &part_id,
+    const common::ObObjectID &target_part_id,
+    common::ObTabletID &tablet_id,
+    common::ObObjectID &subpart_id,
+    RelatedTableInfo *related_table /*= NULL*/);
 
   static bool is_default_list_part(const ObPartition &part);
 
@@ -7376,6 +7396,17 @@ enum ObConstraintType
   CONSTRAINT_TYPE_MAX,
 };
 
+
+enum ObForeignKeyRefType
+{
+  FK_REF_TYPE_INVALID = 0,
+  FK_REF_TYPE_PRIMARY_KEY = 1,
+  FK_REF_TYPE_UNIQUE_KEY = 2,
+  /* 因为ObForeignKeyRefType之前是从ObConstraintType改过来的，所以为了兼容，3和4不用 */
+  FK_REF_TYPE_NON_UNIQUE_KEY = 5,
+  FK_REF_TYPE_MAX,
+};
+
 enum ObNameGeneratedType
 {
   GENERATED_TYPE_UNKNOWN = 0,
@@ -7424,7 +7455,7 @@ public:
       rely_flag_(false),
       is_modify_rely_flag_(false),
       is_modify_fk_state_(false),
-      ref_cst_type_(CONSTRAINT_TYPE_INVALID),
+      fk_ref_type_(FK_REF_TYPE_INVALID),
       ref_cst_id_(common::OB_INVALID_ID),
       is_modify_fk_name_flag_(false),
       is_parent_table_mock_(false),
@@ -7449,8 +7480,9 @@ public:
   inline void set_is_modify_fk_state(const bool is_modify_fk_state) { is_modify_fk_state_ = is_modify_fk_state; }
   inline void set_is_modify_fk_name_flag(const bool is_modify_fk_name_flag) { is_modify_fk_name_flag_ = is_modify_fk_name_flag; }
   inline void set_is_parent_table_mock(const bool is_parent_table_mock) { is_parent_table_mock_ = is_parent_table_mock; }
-  inline void set_ref_cst_type(ObConstraintType ref_cst_type) { ref_cst_type_ = ref_cst_type; }
+  inline void set_fk_ref_type(ObForeignKeyRefType fk_ref_type) { fk_ref_type_ = fk_ref_type; }
   inline void set_ref_cst_id(uint64_t ref_cst_id) { ref_cst_id_ = ref_cst_id; }
+  inline bool is_ref_unique_index() const { return fk_ref_type_ == FK_REF_TYPE_PRIMARY_KEY || fk_ref_type_ == FK_REF_TYPE_UNIQUE_KEY; }
   inline bool is_no_validate() const { return CST_FK_NO_VALIDATE == validate_flag_; }
   inline bool is_validated() const { return CST_FK_VALIDATED == validate_flag_; }
   inline bool is_validating() const { return CST_FK_VALIDATING == validate_flag_; }
@@ -7490,7 +7522,7 @@ public:
     rely_flag_ = false;
     is_modify_rely_flag_ = false;
     is_modify_fk_state_ = false;
-    ref_cst_type_ = CONSTRAINT_TYPE_INVALID;
+    fk_ref_type_ = FK_REF_TYPE_INVALID;
     ref_cst_id_ = common::OB_INVALID_ID;
     is_modify_fk_name_flag_ = false;
     is_parent_table_mock_ = false;
@@ -7512,7 +7544,7 @@ public:
                K_(foreign_key_name), K_(enable_flag), K_(is_modify_enable_flag),
                K_(validate_flag), K_(is_modify_validate_flag),
                K_(rely_flag), K_(is_modify_rely_flag), K_(is_modify_fk_state),
-               K_(ref_cst_type), K_(ref_cst_id), K_(is_modify_fk_name_flag), K_(is_parent_table_mock),
+               K_(fk_ref_type), K_(ref_cst_id), K_(is_modify_fk_name_flag), K_(is_parent_table_mock),
                K_(name_generated_type));
 
 public:
@@ -7532,8 +7564,9 @@ public:
   bool rely_flag_;
   bool is_modify_rely_flag_;
   bool is_modify_fk_state_;
-  ObConstraintType ref_cst_type_;
-  uint64_t ref_cst_id_;
+  // foreign key type (ref primary key/unique key/non-unique key)
+  ObForeignKeyRefType fk_ref_type_; // FARM COMPAT WHITELIST for ref_cst_type_
+  uint64_t ref_cst_id_; // the id of index referenced by foreign key
   bool is_modify_fk_name_flag_;
   bool is_parent_table_mock_;
   ObNameGeneratedType name_generated_type_;

@@ -130,7 +130,8 @@ struct ObStmtCompareContext : ObExprEqualCheckContext
     outer_(NULL),
     map_info_(),
     equal_param_info_(),
-    is_in_same_stmt_(true)
+    is_in_same_stmt_(true),
+    ora_numeric_cmp_for_grouping_items_(false)
   {
     init_override_params();
   }
@@ -141,7 +142,8 @@ struct ObStmtCompareContext : ObExprEqualCheckContext
     outer_(NULL),
     map_info_(),
     equal_param_info_(),
-    is_in_same_stmt_(true)
+    is_in_same_stmt_(true),
+    ora_numeric_cmp_for_grouping_items_(false)
   {
     init_override_params();
   }
@@ -155,7 +157,8 @@ struct ObStmtCompareContext : ObExprEqualCheckContext
     outer_(NULL),
     map_info_(),
     equal_param_info_(),
-    is_in_same_stmt_(is_in_same_stmt)
+    is_in_same_stmt_(is_in_same_stmt),
+    ora_numeric_cmp_for_grouping_items_(false)
   {
     init_override_params();
   }
@@ -171,7 +174,8 @@ struct ObStmtCompareContext : ObExprEqualCheckContext
     outer_(outer),
     map_info_(map_info),
     equal_param_info_(),
-    is_in_same_stmt_(is_in_same_stmt)
+    is_in_same_stmt_(is_in_same_stmt),
+    ora_numeric_cmp_for_grouping_items_(false)
   {
     init_override_params();
   }
@@ -221,6 +225,7 @@ struct ObStmtCompareContext : ObExprEqualCheckContext
   common::ObSEArray<ObExprConstraint, 4> expr_cons_info_;
   common::ObSEArray<ObPCConstParamInfo, 4> const_param_info_;
   bool is_in_same_stmt_; // only if the two stmts are in the same parent stmt, can we compare table id and column id directly
+  bool ora_numeric_cmp_for_grouping_items_;
 
 private:
   DISABLE_COPY_ASSIGN(ObStmtCompareContext);

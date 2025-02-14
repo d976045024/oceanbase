@@ -29,21 +29,27 @@ namespace sql
 {
 class ObDASExtraData;
 class ObLocalIndexLookupOp;
+struct ObDASTCBInterruptInfo;
 
 struct ObDASTCBMemProfileKey {
-  ObDASTCBMemProfileKey()
-    : fake_unique_id_(0), timestamp_(0) {}
+  ObDASTCBMemProfileKey(): fake_unique_id_(0), timestamp_(0)
+  {}
 
-  explicit ObDASTCBMemProfileKey(const ObDASTCBMemProfileKey &key)
-    : fake_unique_id_(key.fake_unique_id_), timestamp_(key.timestamp_) {}
-
-  void init(uint64_t timestamp, int64_t thread_id, int64_t op_id) {
+  void init(uint64_t timestamp, int64_t thread_id, int64_t op_id)
+  {
     timestamp_ = timestamp;
     // [op_id (32bit), thread_id (32bit)]
     fake_unique_id_ = (((uint64_t)op_id) << 32) | ((uint64_t)0xffffffff & thread_id);
   }
 
-  void reset() {
+  void init(const ObDASTCBMemProfileKey &key)
+  {
+    timestamp_ = key.timestamp_;
+    fake_unique_id_ = key.fake_unique_id_;
+  }
+
+  void reset()
+  {
     fake_unique_id_ = 0;
     timestamp_ = 0;
   }
@@ -55,14 +61,15 @@ struct ObDASTCBMemProfileKey {
     hash_val = common::murmurhash(&timestamp_, sizeof(uint64_t), hash_val);
     return hash_val;
   }
-  int hash(int64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
+  int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
 
   inline bool operator==(const ObDASTCBMemProfileKey& key) const
   {
     return fake_unique_id_ == key.fake_unique_id_ && timestamp_ == key.timestamp_;
   }
 
-  inline bool is_valid() {
+  inline bool is_valid()
+  {
     return (fake_unique_id_ > 0) && (timestamp_ > 0);
   }
 
@@ -234,7 +241,8 @@ public:
       scan_op_id_(common::OB_INVALID_ID),
       scan_rows_size_(common::OB_INVALID_ID),
       row_width_(common::OB_INVALID_ID),
-      das_tasks_key_()
+      das_tasks_key_(),
+      in_row_cache_threshold_(common::DEFAULT_MAX_MULTI_GET_CACHE_AWARE_ROW_NUM)
   { }
 
   virtual ~ObDASScanRtDef();
@@ -258,7 +266,8 @@ public:
                        K_(mbr_filters),
                        K_(scan_op_id),
                        K_(scan_rows_size),
-                       K_(das_tasks_key));
+                       K_(das_tasks_key),
+                       K_(in_row_cache_threshold));
   int init_pd_op(ObExecContext &exec_ctx, const ObDASScanCtDef &scan_ctdef);
 
   storage::ObRow2ExprsProjector *p_row2exprs_projector_;
@@ -289,7 +298,7 @@ public:
   int64_t scan_rows_size_;
   int64_t row_width_;   // no use
   ObDASTCBMemProfileKey das_tasks_key_;
-
+  int64_t in_row_cache_threshold_;
 private:
   union {
     storage::ObRow2ExprsProjector row2exprs_projector_;
@@ -323,12 +332,13 @@ public:
   virtual int assign_task_result(ObIDASTaskOp *other) override { return OB_SUCCESS; }
   storage::ObTableScanParam &get_scan_param() { return scan_param_; }
   const storage::ObTableScanParam &get_scan_param() const { return scan_param_; }
+  storage::ObTableScanParam *get_local_lookup_param();
 
   int init_related_tablet_ids(ObDASRelatedTabletID &related_tablet_ids);
 
   virtual int decode_task_result(ObIDASTaskResult *task_result) override;
   virtual int fill_task_result(ObIDASTaskResult &task_result, bool &has_more, int64_t &memory_limit) override;
-  virtual int fill_extra_result() override;
+  virtual int fill_extra_result(const ObDASTCBInterruptInfo &interrupt_info) override;
   virtual int init_task_info(uint32_t row_extend_size) override;
   virtual int swizzling_remote_task(ObDASRemoteInfo *remote_info) override;
   virtual const ObDASBaseCtDef *get_ctdef() const override { return scan_ctdef_; }
